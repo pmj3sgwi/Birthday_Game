@@ -165,14 +165,14 @@ pygame.init()
 
 VIRTUAL_RES      = (320, 240)
 VIRTUAL_RES_1080 = (1920, 1080)
-WINDOW_RES       = (960, 720)
+WINDOW_RES       = (960, 760)
 CHROMA = (3, 7, 11)                              # colorkey for hires-background overlay mode
 _HIRES = (WINDOW_RES[0], WINDOW_RES[1] - 60)    # (960, 660) screen game area
 
 screen = pygame.display.set_mode(WINDOW_RES)
 pygame.display.set_caption("Retro 2D Game")
-display_surface = pygame.Surface(VIRTUAL_RES)
-display_surface_1080 = pygame.Surface(VIRTUAL_RES_1080)
+display_surface = pygame.Surface(VIRTUAL_RES).convert()
+display_surface_1080 = pygame.Surface(VIRTUAL_RES_1080).convert()
 
 BLACK           = (0, 0, 0)
 MARBLE_COLOR_1  = (235, 235, 240)
@@ -186,8 +186,10 @@ CABINET_COLOR   = (120, 70, 30)
 # -------------------------------------------------------------------------
 player_size = 20
 player_x    = VIRTUAL_RES[0] / 2 - 50
-player_y    = VIRTUAL_RES[1] / 2 + 85
+player_y    = 150
 player_speed = 2
+player_dir    = "down"   # last movement direction for sprite rotation
+player_moving = False    # True while movement keys are held
 
 current_scene = "living_room"
 
@@ -196,29 +198,29 @@ _ROOM_VPT = 26   # top of back wall (ceiling junction)
 _ROOM_VPY = 70   # bottom of back wall (floor junction)
 _ROOM_LWX = 60   # left X of back wall
 _ROOM_RWX = 260  # right X of back wall
-_PLAYER_MIN_Y = 97   # player cannot cross behind back-wall objects
+_PLAYER_MIN_Y = 12   # top wall border for top-down view
 
-# Living room  (all objects below horizon _ROOM_VPY)
-desk_rect           = pygame.Rect(88, 78, 94, 18)         # TV 電視台（後牆薄條）
-tv_rect             = pygame.Rect(103, 68, 67, 12)         # 電視機（後牆薄條）
-cabinet_rect        = pygame.Rect(53, 78, 35, 18)          # 電視左側邊桌（後牆薄條）
-living_door_rect    = pygame.Rect(0, 70, 16, 140)          # 左牆臥室門
-sofa_rect           = pygame.Rect(59, 155, 193, 25)        # 沙發（前景薄條）
+# Living room  (top-down view, 320×240 virtual)
+desk_rect           = pygame.Rect(83, 14, 152, 39)         # TV console 含植物+電視+月曆
+tv_rect             = pygame.Rect(109, 14, 72, 35)         # 電視螢幕區域
+cabinet_rect        = pygame.Rect(5, 14, 39, 43)           # 左側邊桌/抽屜（左上角）
+living_door_rect    = pygame.Rect(0, 67, 12, 84)           # 左牆門→臥室
+sofa_rect           = pygame.Rect(71, 180, 162, 44)        # 沙發（底部中央）
 
-# Bedroom
-bedroom_door_rect   = pygame.Rect(VIRTUAL_RES[0] - 16, 73, 16, 100)  # right wall, y=73-173
-bookshelf_rect      = pygame.Rect(5, 73, 65, 18)    # left bookshelf, extends to left wall
-computer_desk_rect  = pygame.Rect(60, 152, 185, 30) # large front desk per bg image
+# Bedroom (top-down view)
+bedroom_door_rect   = pygame.Rect(302, 142, 18, 65)  # right wall door（下方，y=142-207）
+bookshelf_rect      = pygame.Rect(18, 12, 57, 97)    # 左側書架（頂牆靠左）
+computer_desk_rect  = pygame.Rect(78, 12, 139, 90)   # 電腦桌（頂牆中央）
 
-# Bathroom (objects below horizon)
-bathroom_exit_rect  = pygame.Rect(0, 70, 22, 130)    # left-wall exit door, y=70-200
-toilet_rect         = pygame.Rect(130, 74, 42, 22)   # toilet, center-right per bg image
-sink_rect           = pygame.Rect(57, 74, 80, 20)    # sink+cabinet, center-left per bg image
-pipe_rect           = pygame.Rect(115, 30, 30, 20)   # ceiling pipe crack (above back-wall junction)
-bathroom_door_rect  = pygame.Rect(304, 70, 16, 140)  # right wall bathroom door
+# Bathroom (top-down view)
+bathroom_exit_rect  = pygame.Rect(0, 77, 17, 83)     # 左牆出口門（y=77-160）
+toilet_rect         = pygame.Rect(146, 40, 56, 55)   # 馬桶（中央）
+sink_rect           = pygame.Rect(76, 37, 63, 55)    # 洗手台+木櫃（中左）
+pipe_rect           = pygame.Rect(87, 3, 94, 37)     # 頂牆水管（正上方，y=3-40）
+bathroom_door_rect  = pygame.Rect(308, 67, 12, 84)   # living room 右牆通廁所門
 
 # Light switch on back wall, right of TV (320×240 space)
-_SW_NX, _SW_NY, _SW_NW, _SW_NH = 173, 45, 11, 12
+_SW_NX, _SW_NY, _SW_NW, _SW_NH = 258, 18, 11, 12
 
 # Fonts & UI state
 # -------------------------------------------------------------------------
@@ -257,6 +259,37 @@ light_switch_rect_1988 = pygame.Rect(
 )
 light_switch_prox = pygame.Rect(_SW_NX - 20, _SW_NY, _SW_NW + 40, 50)
 
+# Object label & dialogue system
+prompt_label      = ""
+prompt_label_rect = None
+dialogue_active   = False
+dialogue_object   = ""
+dialogue_text     = ""
+dialogue_has_choices = True
+dialogue_choice   = 0
+dialogue_triggered = False
+
+DIALOGUE_MAP = {
+    "tv":           ("Should I turn on the TV?",                True),
+    "cabinet":      ("Let me check what's in here...",          True),
+    "calendar":     ("Should I try time traveling?",             True),
+    "cartridge":    ("Should I take this cartridge?",           True),
+    "light":        ("Should I flip the light switch?",         True),
+    "bedroom":      ("Should I head to the bedroom?",           True),
+    "bathroom":     ("Should I go to the bathroom?",            True),
+    "frontdoor":    ("Should I inspect the front door?",        True),
+    "livingroom":   ("Should I head back to the living room?",  True),
+    "bookshelf":    ("These books look out of order...",        True),
+    "computer":     ("Should I play some games?",               True),
+    "exit":         ("Should I head back?",                     True),
+    "sink":         ("Let me take a look at this sink.",        True),
+    "pipe":         ("This pipe is leaking badly...",           False),
+    "ironbox":      ("Should I pick up this iron box?",         True),
+    "ironbox_place":("Should I put this under the pipe?",       True),
+    "ironbox_rusty":("This box is rusty... Can I open it?",     True),
+    "shelf":        ("Should I inspect the shelf?",             True),
+}
+
 # Puzzle & Interaction States
 bookshelf_order   = ["Red", "Blue", "Green"]
 bookshelf_selection = 0
@@ -267,7 +300,7 @@ cup_state         = 0  # 0: intact, 1: crushed
 tetris_cart_spawned = False
 tetris_cart_rect  = pygame.Rect(desk_rect.centerx - 7, desk_rect.y + 4, 12, 8)  # On the desk
 
-main_door_rect    = pygame.Rect(197, 78, 55, 20)     # 大門（後牆薄條）
+main_door_rect    = pygame.Rect(214, 0, 42, 19)      # 主大門（右上角門框）
 door_puzzle_state = [False, False, False, False]
 # Tetris constants & state
 # -------------------------------------------------------------------------
@@ -359,34 +392,89 @@ except Exception as e:
     sf2_icon = None
 
 # Scene background images and player sprite
-bg_living = bg_living_orig = bg_bathroom = bg_bedroom = player_img = None
+bg_living = bg_living_orig = bg_bathroom = bg_bedroom = None
+bg_1988_living = None
+bg_1988_bathroom = None
+bg_1988_bedroom = None
+bg_time_travel = None
+player_img_1988_idle = player_img_1988_walk_down = player_img_1988_walk_up = None
+player_img_1988_walk_left = player_img_1988_walk_right = None
+player_img_2026_idle = player_img_2026_walk_down = player_img_2026_walk_up = None
+player_img_2026_walk_left = player_img_2026_walk_right = None
 try:
-    _raw = pygame.image.load(get_resource_path(os.path.join("picture", "2026_客廳_G.png")))
+    _raw = pygame.image.load(get_resource_path(os.path.join("picture", "2026_客廳_T.png"))).convert()
     bg_living = pygame.transform.scale(_raw, _HIRES)
 except Exception as e:
     print(f"Could not load 客廳 bg: {e}")
 try:
-    _raw = pygame.image.load(get_resource_path(os.path.join("picture", "2026_客廳Original_G.png")))
+    _raw = pygame.image.load(get_resource_path(os.path.join("picture", "2026_客廳Original_T.png"))).convert()
     bg_living_orig = pygame.transform.scale(_raw, _HIRES)
 except Exception as e:
     print(f"Could not load 客廳Original bg: {e}")
 try:
-    _raw = pygame.image.load(get_resource_path(os.path.join("picture", "2026_廁所_G.png")))
+    _raw = pygame.image.load(get_resource_path(os.path.join("picture", "2026_廁所_T.png"))).convert()
     bg_bathroom = pygame.transform.scale(_raw, _HIRES)
 except Exception as e:
     print(f"Could not load 廁所 bg: {e}")
 try:
-    _raw = pygame.image.load(get_resource_path(os.path.join("picture", "2026_房間_G.png")))
+    _raw = pygame.image.load(get_resource_path(os.path.join("picture", "2026_房間_T.png"))).convert()
     bg_bedroom = pygame.transform.scale(_raw, _HIRES)
 except Exception as e:
     print(f"Could not load 房間 bg: {e}")
 try:
-    _raw = pygame.image.load(get_resource_path(os.path.join("picture", "player_real_transparent.png"))).convert_alpha()
-    player_img = pygame.transform.scale(_raw, (400, 300))
+    _raw = pygame.image.load(get_resource_path(os.path.join("picture", "1988_客廳_T.png"))).convert()
+    bg_1988_living = pygame.transform.scale(_raw, VIRTUAL_RES_1080)
 except Exception as e:
-    print(f"Could not load player_real_transparent.png: {e}")
+    print(f"Could not load 1988_客廳_T.png: {e}")
+try:
+    _raw = pygame.image.load(get_resource_path(os.path.join("picture", "BB_Digi_去背.png"))).convert_alpha()
+    player_img_1988_idle = pygame.transform.scale(_raw, (186, 186))
+except Exception as e:
+    print(f"Could not load BB_Digi_去背.png: {e}")
+try:
+    _raw = pygame.image.load(get_resource_path(os.path.join("picture", "BB_Digi_T_去背.png"))).convert_alpha()
+    _walk_sq = pygame.transform.scale(_raw, (186, 186))
+    player_img_1988_walk_down  = _walk_sq
+    player_img_1988_walk_up    = pygame.transform.rotate(_walk_sq, 180)
+    player_img_1988_walk_left  = pygame.transform.rotate(_walk_sq, -90)
+    player_img_1988_walk_right = pygame.transform.rotate(_walk_sq, 90)
+except Exception as e:
+    print(f"Could not load BB_Digi_T_去背.png: {e}")
+try:
+    _raw = pygame.image.load(get_resource_path(os.path.join("picture", "BB_去背.png"))).convert_alpha()
+    player_img_2026_idle = pygame.transform.scale(_raw, (267, 186))
+except Exception as e:
+    print(f"Could not load BB_去背.png: {e}")
+try:
+    _raw = pygame.image.load(get_resource_path(os.path.join("picture", "BB_T_去背.png"))).convert_alpha()
+    _walk_sq = pygame.transform.scale(_raw, (186, 186))
+    player_img_2026_walk_down  = _walk_sq
+    player_img_2026_walk_up    = pygame.transform.rotate(_walk_sq, 180)
+    player_img_2026_walk_left  = pygame.transform.rotate(_walk_sq, -90)
+    player_img_2026_walk_right = pygame.transform.rotate(_walk_sq, 90)
+except Exception as e:
+    print(f"Could not load BB_T.png: {e}")
+try:
+    _raw = pygame.image.load(get_resource_path(os.path.join("picture", "Time_Travel.png"))).convert()
+    bg_time_travel = pygame.transform.scale(_raw, WINDOW_RES)
+except Exception as e:
+    print(f"Could not load Time_Travel.png: {e}")
+try:
+    _raw = pygame.image.load(get_resource_path(os.path.join("picture", "1988_廁所_T.png"))).convert()
+    bg_1988_bathroom = pygame.transform.scale(_raw, VIRTUAL_RES_1080)
+except Exception as e:
+    print(f"Could not load 1988_廁所_T.png: {e}")
+try:
+    _raw = pygame.image.load(get_resource_path(os.path.join("picture", "1988_房間_T.png"))).convert()
+    bg_1988_bedroom = pygame.transform.scale(_raw, VIRTUAL_RES_1080)
+except Exception as e:
+    print(f"Could not load 1988_房間_T.png: {e}")
 
 clock = pygame.time.Clock()
+
+# Pre-allocated surfaces for 1988 dark scene (avoids per-frame 8MB+ allocations)
+_dark_overlay = pygame.Surface(VIRTUAL_RES_1080, pygame.SRCALPHA)
+_scaled_1988  = pygame.Surface(WINDOW_RES).convert()
 
 
 def draw_cartridge_icon(surface, rect, color):
@@ -444,13 +532,17 @@ def draw_desk_and_calendar(surface):
 
 def draw_grid_calendar_ui(surface, date):
     """Three-stage calendar rendering..."""
-    overlay = pygame.Surface(WINDOW_RES, pygame.SRCALPHA)
-    overlay.fill((0, 0, 0, 180))
-    surface.blit(overlay, (0, 0))
+    if bg_time_travel:
+        surface.blit(bg_time_travel, (0, 0))
+    else:
+        overlay = pygame.Surface(WINDOW_RES, pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 180))
+        surface.blit(overlay, (0, 0))
 
     cal_w, cal_h = 500, 510
-    cal_x = (WINDOW_RES[0] - cal_w) // 2
+    cal_x = (WINDOW_RES[0] - cal_w) // 2 + 130
     cal_y = (WINDOW_RES[1] - cal_h) // 2
+    _cal_cx = cal_x + cal_w // 2
 
     pygame.draw.rect(surface, (22, 22, 22), (cal_x, cal_y, cal_w, cal_h), border_radius=12)
     pygame.draw.rect(surface, (200, 50, 50), (cal_x, cal_y, cal_w, 60), border_radius=12)
@@ -474,15 +566,15 @@ def draw_grid_calendar_ui(surface, date):
     if calendar_stage == "year":
         # Large year number
         yr_big = high_res_big_font.render(str(date.year), True, (255, 255, 100))
-        surface.blit(yr_big, yr_big.get_rect(center=(WINDOW_RES[0]//2, cal_y + 210)))
+        surface.blit(yr_big, yr_big.get_rect(center=(_cal_cx, cal_y + 210)))
         # Decade label
         dec = cal_header_font.render(f"{date.year // 10 * 10}s", True, (150, 200, 150))
-        surface.blit(dec, dec.get_rect(center=(WINDOW_RES[0]//2, cal_y + 100)))
+        surface.blit(dec, dec.get_rect(center=(_cal_cx, cal_y + 100)))
         inst = "Up/Dn: +/- 10YR   Lt/Rt: +/- 1YR   SPACE: Confirm   ESC: Close"
 
     elif calendar_stage == "month":
         yr = high_res_inst_font.render(str(date.year), True, (200, 200, 100))
-        surface.blit(yr, yr.get_rect(center=(WINDOW_RES[0]//2, cal_y + 85)))
+        surface.blit(yr, yr.get_rect(center=(_cal_cx, cal_y + 85)))
         month_short = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
                        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
         mw, mh = 120, 50
@@ -507,7 +599,7 @@ def draw_grid_calendar_ui(surface, date):
                             "July", "August", "September", "October", "November", "December"]
         hdr = cal_header_font.render(
             f"{month_names_full[date.month-1]} {date.year}", True, (255, 255, 100))
-        surface.blit(hdr, hdr.get_rect(center=(WINDOW_RES[0]//2, cal_y + 75)))
+        surface.blit(hdr, hdr.get_rect(center=(_cal_cx, cal_y + 75)))
         pygame.draw.line(surface, (0, 140, 0), (cal_x+20, cal_y+100), (cal_x+cal_w-20, cal_y+100), 1)
 
         dow_labels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
@@ -541,7 +633,7 @@ def draw_grid_calendar_ui(surface, date):
         inst = "Arrows: Move   SPACE: Confirm Date   ESC: Back to Month"
 
     is_ = cal_inst_font.render(inst, True, (150, 175, 150))
-    surface.blit(is_, is_.get_rect(center=(WINDOW_RES[0]//2, cal_y + cal_h - 16)))
+    surface.blit(is_, is_.get_rect(center=(_cal_cx, cal_y + cal_h - 16)))
 
 # Mystery Cube Icon
 # -------------------------------------------------------------------------
@@ -928,290 +1020,285 @@ def render_1988_scene(px_v, py_v, pS_v, flashlight_active):
 
     # Draw full 16bit scene at low-res first
     if current_scene == "living_room":
-        ds.fill((160, 140, 100))
-        for i in range(V[0] // 16):
-            for j in range(V[1] // 16):
-                if (i/16 + j/16) % 2 == 0:
-                    pygame.draw.rect(ds, (160, 140, 100), (i*16, j*16, 16, 16))
-                else:
-                    pygame.draw.rect(ds, (140, 120, 90), (i*16, j*16, 16, 16))
-        # Desk (top face + front face, like 2026)
-        dx = desk_rect.x * V[0] // VIRTUAL_RES[0]
-        dy = desk_rect.y * V[1] // VIRTUAL_RES[1]
-        dw = max(4, desk_rect.width * V[0] // VIRTUAL_RES[0])
-        dh = max(4, desk_rect.height * V[1] // VIRTUAL_RES[1])
-        top_h = dh * 11 // 18
-        front_h = dh - top_h
-        pygame.draw.rect(ds, (115, 65, 22), (dx, dy, dw, top_h))
-        pygame.draw.rect(ds, (82, 42, 10), (dx+2, dy+top_h, max(1, dw-2), front_h))
-        pygame.draw.rect(ds, (55, 25, 5), (dx, dy, dw, dh), 2)
-        # Calendar (white + red header + grey dots)
-        cal_x = dx + dw * 4 // 50
-        cal_y = dy + dh * 3 // 18
-        cal_w = max(8, dw * 14 // 50)
-        cal_h = max(8, dh * 12 // 18)
-        pygame.draw.rect(ds, (240, 240, 240), (cal_x, cal_y, cal_w, cal_h))
-        pygame.draw.rect(ds, (180, 40, 40), (cal_x, cal_y, cal_w, cal_h * 4 // 12))
-        pygame.draw.rect(ds, (20, 20, 20), (cal_x, cal_y, cal_w, cal_h), 1)
-        for row in range(2):
-            for col in range(3):
-                dot_x = cal_x + cal_w * (2 + col * 4) // 14
-                dot_y = cal_y + cal_h * (5 + row * 4) // 12
-                pygame.draw.rect(ds, (100, 100, 100),
-                                 (dot_x, dot_y, max(1, cal_w * 2 // 14), max(1, cal_h * 2 // 12)))
-        # TV on desk (dark screen + bezel, like 2026 but unlit)
-        tvx = tv_rect.x * V[0] // VIRTUAL_RES[0]
-        tvy = tv_rect.y * V[1] // VIRTUAL_RES[1]
-        tvw = max(4, tv_rect.width * V[0] // VIRTUAL_RES[0])
-        tvh = max(4, tv_rect.height * V[1] // VIRTUAL_RES[1])
-        pygame.draw.rect(ds, (28, 28, 28), (tvx, tvy, tvw, tvh))
-        pygame.draw.rect(ds, (18, 18, 18), (tvx, tvy, tvw, tvh), 2)
-        pygame.draw.rect(ds, (20, 22, 25), (tvx+2, tvy+2, max(1, tvw-4), max(1, tvh-5)))
-
-        # Sofa (multi-cushion with back rest and armrests, like draw_sofa_hires)
-        s1x = sofa_rect.x * V[0] // VIRTUAL_RES[0]
-        s1y = sofa_rect.y * V[1] // VIRTUAL_RES[1]
-        s1w = max(8, sofa_rect.width * V[0] // VIRTUAL_RES[0])
-        s1h = max(8, sofa_rect.height * V[1] // VIRTUAL_RES[1])
-        arm_w = max(4, s1w * 22 // 70)
-        back_h = max(4, s1h * 22 // 28)
-        pygame.draw.rect(ds, (90, 55, 55), (s1x, s1y, s1w, s1h))
-        pygame.draw.rect(ds, (70, 40, 40), (s1x, s1y, s1w, back_h))
-        cw4 = max(2, (s1w - arm_w * 2) // 4)
-        for i in range(4):
-            cix = s1x + arm_w + i * cw4
-            acw = cw4 if i < 3 else s1w - arm_w * 2 - cw4 * 3
-            if acw > 0:
-                pygame.draw.rect(ds, (105, 62, 62),
-                                 (cix+2, s1y+back_h+2, max(1, acw-4), max(1, s1h-back_h-4)))
-                pygame.draw.rect(ds, (120, 78, 78),
-                                 (cix+2, s1y+back_h+2, max(1, acw-4), max(1, s1h-back_h-4)), 1)
-        pygame.draw.rect(ds, (62, 33, 33), (s1x, s1y, arm_w, s1h))
-        pygame.draw.rect(ds, (62, 33, 33), (s1x+s1w-arm_w, s1y, arm_w, s1h))
-
-        # Bookshelf (with shelf lines)
-        bsx = bookshelf_rect.x * V[0] // VIRTUAL_RES[0]
-        bsy = bookshelf_rect.y * V[1] // VIRTUAL_RES[1]
-        bsw = max(8, bookshelf_rect.width * V[0] // VIRTUAL_RES[0])
-        bsh = max(8, bookshelf_rect.height * V[1] // VIRTUAL_RES[1])
-        pygame.draw.rect(ds, (72, 46, 20), (bsx, bsy, bsw, bsh))
-        pygame.draw.rect(ds, (55, 32, 10), (bsx+2, bsy+2, max(1, bsw-4), max(1, bsh-4)))
-        for shelf in range(1, 4):
-            sy_line = bsy + bsh * shelf // 4
-            pygame.draw.rect(ds, (42, 22, 6), (bsx, sy_line, bsw, 2))
-
-        # Cabinet (dividers + knobs)
-        c1x = cabinet_rect.x * V[0] // VIRTUAL_RES[0]
-        c1y = cabinet_rect.y * V[1] // VIRTUAL_RES[1]
-        c1w = max(8, cabinet_rect.width * V[0] // VIRTUAL_RES[0])
-        c1h = max(8, cabinet_rect.height * V[1] // VIRTUAL_RES[1])
-        pygame.draw.rect(ds, (118, 74, 38), (c1x, c1y, c1w, c1h))
-        pygame.draw.rect(ds, (82, 50, 22), (c1x+2, c1y+2, max(1, c1w-4), max(1, c1h-4)))
-        pygame.draw.rect(ds, (55, 30, 10), (c1x+2, c1y+c1h*20//90, max(1, c1w-4), 3))
-        pygame.draw.rect(ds, (55, 30, 10), (c1x+2, c1y+c1h*60//90, max(1, c1w-4), 3))
-        for ky in [10, 40, 80]:
-            pygame.draw.circle(ds, (168, 162, 148),
-                               (c1x + c1w//2 - max(4, c1w//8), c1y + c1h*ky//90), max(2, c1w//12))
-
-        # Living door (frame + inner panel + knob)
-        ldx = living_door_rect.x * V[0] // VIRTUAL_RES[0]
-        ldy = living_door_rect.y * V[1] // VIRTUAL_RES[1]
-        ldw = max(4, living_door_rect.width * V[0] // VIRTUAL_RES[0])
-        ldh = max(4, living_door_rect.height * V[1] // VIRTUAL_RES[1])
-        pygame.draw.rect(ds, (100, 65, 35), (ldx, ldy, ldw, ldh))
-        pygame.draw.rect(ds, (68, 40, 16), (ldx+2, ldy+2, max(1, ldw-4), max(1, ldh-4)))
-        pygame.draw.circle(ds, (175, 160, 55),
-                           (ldx + max(3, ldw - ldw//5), ldy + ldh//2), max(2, ldw//10))
-
-        # Bathroom door on right wall (frame + inner panel + knob)
-        bdx = bathroom_door_rect.x * V[0] // VIRTUAL_RES[0]
-        bdy = bathroom_door_rect.y * V[1] // VIRTUAL_RES[1]
-        bdw = max(4, bathroom_door_rect.width * V[0] // VIRTUAL_RES[0])
-        bdh = max(4, bathroom_door_rect.height * V[1] // VIRTUAL_RES[1])
-        pygame.draw.rect(ds, (100, 65, 35), (bdx, bdy, bdw, bdh))
-        pygame.draw.rect(ds, (68, 40, 16), (bdx+2, bdy+2, max(1, bdw-4), max(1, bdh-4)))
-        pygame.draw.circle(ds, (175, 160, 55),
-                           (bdx + max(3, bdw//5), bdy + bdh//2), max(2, bdw//10))
-
-        # Light switch on back wall — clearly visible white plate
-        sw = light_switch_rect_1988
-        pygame.draw.rect(ds, (160, 155, 145), (sw.x - 6, sw.y - 6, sw.w + 12, sw.h + 12))
-        pygame.draw.rect(ds, (70, 65, 55), (sw.x - 6, sw.y - 6, sw.w + 12, sw.h + 12), 3)
-        tog_col = (60, 200, 60) if room_lights_on else (200, 190, 170)
-        pygame.draw.rect(ds, tog_col, (sw.x, sw.y, sw.w, sw.h))
+        ds.blit(bg_1988_living, (0, 0))
 
     elif current_scene == "bedroom":
-        ds.fill((160, 150, 180))
-        for j in range(V[1] // 16):
-            for i in range(V[0] // 16):
-                if (i/16 + j/16) % 2 == 0:
-                    pygame.draw.rect(ds, (160, 145, 175), (i*16, j*16, 16, 16))
-                else:
-                    pygame.draw.rect(ds, (145, 130, 160), (i*16, j*16, 16, 16))
-
-        # Bedroom door (frame + inner panel + knob)
-        bdx_v = bedroom_door_rect.x * V[0] // VIRTUAL_RES[0]
-        bdy_v = bedroom_door_rect.y * V[1] // VIRTUAL_RES[1]
-        bdw_v = max(4, bedroom_door_rect.width * V[0] // VIRTUAL_RES[0])
-        bdh_v = max(4, bedroom_door_rect.height * V[1] // VIRTUAL_RES[1])
-        pygame.draw.rect(ds, (100, 65, 35), (bdx_v, bdy_v, bdw_v, bdh_v))
-        pygame.draw.rect(ds, (68, 40, 16), (bdx_v+2, bdy_v+2, max(1, bdw_v-4), max(1, bdh_v-4)))
-        pygame.draw.circle(ds, (175, 160, 55),
-                           (bdx_v + max(3, bdw_v//5), bdy_v + bdh_v//2), max(2, bdw_v//10))
-
-        # Bookshelf (with horizontal shelf lines)
-        bsx = bookshelf_rect.x * V[0] // VIRTUAL_RES[0]
-        bsy = bookshelf_rect.y * V[1] // VIRTUAL_RES[1]
-        bsw = max(8, bookshelf_rect.width * V[0] // VIRTUAL_RES[0])
-        bsh = max(8, bookshelf_rect.height * V[1] // VIRTUAL_RES[1])
-        pygame.draw.rect(ds, (72, 46, 20), (bsx, bsy, bsw, bsh))
-        pygame.draw.rect(ds, (55, 32, 10), (bsx+2, bsy+2, max(1, bsw-4), max(1, bsh-4)))
-        for shelf in range(1, 4):
-            sy_line = bsy + bsh * shelf // 4
-            pygame.draw.rect(ds, (42, 22, 6), (bsx, sy_line, bsw, 2))
-
-        # Computer desk (desk body + monitor above)
-        cdx = computer_desk_rect.x * V[0] // VIRTUAL_RES[0]
-        cdy = computer_desk_rect.y * V[1] // VIRTUAL_RES[1]
-        cdw = max(8, computer_desk_rect.width * V[0] // VIRTUAL_RES[0])
-        cdh = max(8, computer_desk_rect.height * V[1] // VIRTUAL_RES[1])
-        pygame.draw.rect(ds, (128, 122, 116), (cdx, cdy, cdw, cdh))
-        pygame.draw.rect(ds, (95, 90, 85), (cdx+2, cdy+2, max(1, cdw-4), max(1, cdh-4)))
-        mon_w = max(6, cdw * 30 // 90)
-        mon_h = max(6, cdh * 20 // 35)
-        mon_x = cdx + cdw // 2 - mon_w // 2
-        pygame.draw.rect(ds, (22, 22, 28), (mon_x, cdy - mon_h, mon_w, mon_h))
-        pygame.draw.rect(ds, (18, 18, 22), (mon_x, cdy - mon_h, mon_w, mon_h), 2)
-        pygame.draw.rect(ds, (20, 40, 20), (mon_x+2, cdy-mon_h+2, max(1, mon_w-4), max(1, mon_h-4)))
+        ds.blit(bg_1988_bedroom, (0, 0))
 
     elif current_scene == "bathroom":
-        ds.fill((200, 200, 210))
-        for i in range(V[0] // 12):
-            for j in range(V[1] // 12):
-                if (i/12 + j/12) % 2 == 0:
-                    pygame.draw.rect(ds, (185, 185, 195), (i*12, j*12, 12, 12))
-                else:
-                    pygame.draw.rect(ds, (210, 210, 220), (i*12, j*12, 12, 12))
-
-        # Exit door (frame + inner panel + knob)
-        ex = bathroom_exit_rect.x * V[0] // VIRTUAL_RES[0]
-        ey = bathroom_exit_rect.y * V[1] // VIRTUAL_RES[1]
-        ew = max(4, bathroom_exit_rect.width * V[0] // VIRTUAL_RES[0])
-        eh = max(4, bathroom_exit_rect.height * V[1] // VIRTUAL_RES[1])
-        pygame.draw.rect(ds, (72, 42, 18), (ex, ey, ew, eh))
-        pygame.draw.rect(ds, (96, 62, 28), (ex+2, ey+2, max(1, ew-4), max(1, eh-4)))
-        pygame.draw.circle(ds, (175, 160, 55),
-                           (ex + max(3, ew - ew//5), ey + eh//2), max(2, ew//10))
-
-        tx = toilet_rect.x * V[0] // VIRTUAL_RES[0]
-        ty = toilet_rect.y * V[1] // VIRTUAL_RES[1]
-        tw = max(1, toilet_rect.width * V[0] // VIRTUAL_RES[0])
-        th = max(1, toilet_rect.height * V[1] // VIRTUAL_RES[1])
-        pygame.draw.rect(ds, (220, 220, 225), (tx, ty, tw, th))
-        pygame.draw.rect(ds, (180, 180, 185), (tx, ty, tw, max(1, th//3)))
-
-        skx = sink_rect.x * V[0] // VIRTUAL_RES[0]
-        sky = sink_rect.y * V[1] // VIRTUAL_RES[1]
-        skw = max(1, sink_rect.width * V[0] // VIRTUAL_RES[0])
-        skh = max(1, sink_rect.height * V[1] // VIRTUAL_RES[1])
-        pygame.draw.rect(ds, (200, 200, 200), (skx, sky, skw, skh))
-        pygame.draw.rect(ds, (150, 150, 150), (skx+2, sky+2, skw-4, skh-4))
-
-        # Leaking pipe wall-mounted (1988 scene)
+        ds.blit(bg_1988_bathroom, (0, 0))
+        # Pipe drip animation on top of background
         ppx = pipe_rect.x * V[0] // VIRTUAL_RES[0]
         ppy = pipe_rect.y * V[1] // VIRTUAL_RES[1]
         ppw = max(2, pipe_rect.width * V[0] // VIRTUAL_RES[0])
         pph = max(4, pipe_rect.height * V[1] // VIRTUAL_RES[1])
-        # Wall elbow bracket
-        pygame.draw.rect(ds, (80, 85, 95), (ppx - 6, ppy, ppw + 12, 10))
-        # Pipe body
-        pygame.draw.rect(ds, (100, 105, 115), (ppx, ppy, ppw, pph))
-        pygame.draw.rect(ds, (130, 135, 145), (ppx + 2, ppy, max(1, ppw - 4), pph), 1)
-        # Animated drip drops (scaled)
         for drop_off in [0, 280, 560]:
             t = (pygame.time.get_ticks() + drop_off) // 350 % 10
             if t < 8:
                 pygame.draw.circle(ds, (70, 150, 210),
                                    (ppx + ppw // 2, ppy + pph + t * V[1] // 240), max(2, V[1] // 200))
-
-        # Iron box on toilet shelf (1988, state 0) or placed under pipe (state 1/2)
+        # Iron box state drawing on top of background
+        tx = toilet_rect.x * V[0] // VIRTUAL_RES[0]
+        ty = toilet_rect.y * V[1] // VIRTUAL_RES[1]
+        tw = max(1, toilet_rect.width * V[0] // VIRTUAL_RES[0])
+        th = max(1, toilet_rect.height * V[1] // VIRTUAL_RES[1])
         if iron_box_state == 0:
-            bx = tx + 2
-            by = ty + 2
-            pygame.draw.rect(ds, (160, 140, 110), (bx, by, max(4, tw // 2), max(4, th // 2)))
-            pygame.draw.rect(ds, (100, 80, 60), (bx, by, max(4, tw // 2), max(4, th // 2)), 1)
+            pygame.draw.rect(ds, (160, 140, 110), (tx + 2, ty + 2, max(4, tw // 2), max(4, th // 2)))
+            pygame.draw.rect(ds, (100, 80, 60), (tx + 2, ty + 2, max(4, tw // 2), max(4, th // 2)), 1)
         elif iron_box_state == 1:
-            # Holding - show near player as a small indicator
             pygame.draw.rect(ds, (160, 140, 110), (px_v + 6, py_v - 4, 6, 5))
         elif iron_box_state == 2:
-            # Placed under leaking pipe
             pygame.draw.rect(ds, (150, 130, 100), (ppx - 2, ppy + pph + 2, ppw + 4, 6))
             pygame.draw.rect(ds, (100, 80, 60), (ppx - 2, ppy + pph + 2, ppw + 4, 6), 1)
 
-    # Four-wall one-point perspective on 1988 scene (1920×1080 virtual space)
-    _vpt = int(_ROOM_VPT * V[1] / 240)   # ≈ 117
-    _vpb = int(_ROOM_VPY * V[1] / 240)   # ≈ 315
-    _lwx = int(_ROOM_LWX * V[0] / 320)   # ≈ 360
-    _rwx = int(_ROOM_RWX * V[0] / 320)   # ≈ 1560
-    W_BK = (55, 48, 38);  W_CEL = (45, 40, 32);  W_SID = (40, 35, 28);  W_LN = (34, 28, 20)
-    pygame.draw.polygon(ds, W_CEL, [(0,0),(V[0],0),(_rwx,_vpt),(_lwx,_vpt)])
-    pygame.draw.rect(ds, W_BK, (_lwx, _vpt, _rwx - _lwx, _vpb - _vpt))
-    pygame.draw.polygon(ds, W_SID, [(0,0),(_lwx,_vpt),(_lwx,_vpb),(0,V[1])])
-    pygame.draw.polygon(ds, W_SID, [(V[0],0),(_rwx,_vpt),(_rwx,_vpb),(V[0],V[1])])
-    pygame.draw.line(ds, W_LN, (0,0), (_lwx,_vpt), 4)
-    pygame.draw.line(ds, W_LN, (V[0],0), (_rwx,_vpt), 4)
-    pygame.draw.line(ds, W_LN, (_lwx,_vpt), (_rwx,_vpt), 4)
-    pygame.draw.line(ds, W_LN, (_lwx,_vpb), (_rwx,_vpb), 5)
-    pygame.draw.line(ds, W_LN, (_lwx,_vpt), (_lwx,_vpb), 3)
-    pygame.draw.line(ds, W_LN, (_rwx,_vpt), (_rwx,_vpb), 3)
-    pygame.draw.line(ds, W_LN, (0,V[1]), (_lwx,_vpb), 2)
-    pygame.draw.line(ds, W_LN, (V[0],V[1]), (_rwx,_vpb), 2)
 
     # Only apply darkness overlay when lights are OFF
     if not room_lights_on:
-        dark = pygame.Surface(V, pygame.SRCALPHA)
-        dark.fill((0, 0, 0, 250))
+        # Reuse pre-allocated surface — avoid 8MB allocation per frame
+        _dark_overlay.fill((0, 0, 0, 250))
 
         if flashlight_active:
-            # Draw concentric circles large→small; center pixel ends up with alpha≈0 (fully lit)
             fl_radius = 300
-            for r in range(fl_radius, -1, -3):
-                progress = r / fl_radius          # 1.0 at edge, 0.0 at center
-                a = int(250 * (progress ** 0.5))  # sqrt falloff → bright center, hard edge
-                pygame.draw.circle(dark, (0, 0, 0, a), (px_v, py_v), r)
+            for r in range(fl_radius, -1, -5):  # step 5 (was 3): ~40% fewer iterations
+                progress = r / fl_radius
+                a = int(250 * (progress ** 0.5))
+                pygame.draw.circle(_dark_overlay, (0, 0, 0, a), (px_v, py_v), r)
         else:
-            # Tiny ambient glow around player when no flashlight (40px radius)
             amb_r = 40
-            for r in range(amb_r, -1, -1):
+            for r in range(amb_r, -1, -2):  # step 2 (was 1): half iterations
                 progress = r / amb_r
                 a = int(250 * (progress ** 0.4))
-                pygame.draw.circle(dark, (0, 0, 0, a), (px_v, py_v), r)
+                pygame.draw.circle(_dark_overlay, (0, 0, 0, a), (px_v, py_v), r)
 
-        # Calendar icon always glows faintly in living room
+        # Calendar glow — use draw.circle instead of slow get_at/set_at pixel loop
         if current_scene == "living_room":
-            dx = desk_rect.x * V[0] // VIRTUAL_RES[0]
-            dy = desk_rect.y * V[1] // VIRTUAL_RES[1]
-            dw = max(1, desk_rect.width * V[0] // VIRTUAL_RES[0])
-            dh = max(1, desk_rect.height * V[1] // VIRTUAL_RES[1])
-            gcx = dx + dw // 2
-            gcy = dy + dh // 2
-            for dx_off in range(-5, 6):
-                for dy_off in range(-5, 6):
-                    dist = (dx_off*dx_off + dy_off*dy_off) ** 0.5
-                    if dist <= 5:
-                        nx, ny = gcx + dx_off, gcy + dy_off
-                        if 0 <= nx < V[0] and 0 <= ny < V[1]:
-                            cur_a = dark.get_at((nx, ny))[3]
-                            dark.set_at((nx, ny), (0, 0, 0, max(0, cur_a - 100)))
+            gcx = desk_rect.x * V[0] // VIRTUAL_RES[0] + desk_rect.width * V[0] // VIRTUAL_RES[0] // 2
+            gcy = desk_rect.y * V[1] // VIRTUAL_RES[1] + desk_rect.height * V[1] // VIRTUAL_RES[1] // 2
+            pygame.draw.circle(_dark_overlay, (0, 0, 0, 150), (gcx, gcy), 12)
 
-        ds.blit(dark, (0, 0))
+        ds.blit(_dark_overlay, (0, 0))
     # else: room_lights_on == True -> no darkness, full scene visible
 
-    # Player dot on top
-    p_color = (180, 80, 80) if flashlight_active else (60, 60, 80)
-    pygame.draw.rect(ds, p_color, (px_v, py_v, pS_v, pS_v))
 
-    return pygame.transform.scale(ds, WINDOW_RES)
+    # Reuse pre-allocated output surface — avoid per-frame 960×720 allocation
+    pygame.transform.scale(ds, WINDOW_RES, _scaled_1988)
+    return _scaled_1988
+
+# Object label & dialogue helpers
+# -------------------------------------------------------------------------
+
+def _do_proximity_check():
+    """Set prompt_label/prompt_label_rect based on player position each frame."""
+    global prompt_label, prompt_label_rect
+    prompt_label = ""
+    prompt_label_rect = None
+    if ui_state != "game" or dialogue_active:
+        return
+    if current_scene == "living_room":
+        if tetris_cart_spawned and player_rect.colliderect(calendar_proximity_rect):
+            prompt_label = "Cartridge"
+            prompt_label_rect = desk_rect
+        elif player_rect.colliderect(calendar_proximity_rect):
+            prompt_label = "Calendar"
+            prompt_label_rect = desk_rect
+        elif (calendar_date == DATE_1988 and not room_lights_on
+              and player_rect.colliderect(light_switch_prox)):
+            prompt_label = "Light"
+            prompt_label_rect = light_switch_prox
+        elif player_rect.colliderect(living_door_prox):
+            prompt_label = "Bedroom"
+            prompt_label_rect = living_door_rect
+        elif player_rect.colliderect(bathroom_door_prox):
+            prompt_label = "Bathroom"
+            prompt_label_rect = bathroom_door_rect
+        elif calendar_date == datetime.date(2026, 6, 22):
+            if player_rect.colliderect(tv_proximity_rect):
+                prompt_label = "TV"
+                prompt_label_rect = tv_rect
+            elif player_rect.colliderect(cabinet_proximity_rect):
+                prompt_label = "Cabinet"
+                prompt_label_rect = cabinet_rect
+            elif player_rect.colliderect(main_door_rect.inflate(32, 32)):
+                prompt_label = "Front Door"
+                prompt_label_rect = main_door_rect
+    elif current_scene == "bedroom":
+        if player_rect.colliderect(bedroom_door_prox):
+            prompt_label = "Living Room"
+            prompt_label_rect = bedroom_door_rect
+        elif player_rect.colliderect(bookshelf_prox):
+            prompt_label = "Bookshelf"
+            prompt_label_rect = bookshelf_rect
+        elif player_rect.colliderect(computer_prox):
+            prompt_label = "Computer"
+            prompt_label_rect = computer_desk_rect
+    elif current_scene == "bathroom":
+        if player_rect.colliderect(bathroom_exit_prox):
+            prompt_label = "Exit"
+            prompt_label_rect = bathroom_exit_rect
+        elif player_rect.colliderect(sink_rect.inflate(32, 32)):
+            prompt_label = "Sink"
+            prompt_label_rect = sink_rect
+        elif player_rect.colliderect(pipe_rect.inflate(20, 20)):
+            prompt_label = "Pipe"
+            prompt_label_rect = pipe_rect
+        elif player_rect.colliderect(toilet_rect.inflate(32, 32)):
+            if calendar_date == DATE_1988 and iron_box_state == 0:
+                prompt_label = "Iron Box"
+            elif calendar_date != DATE_1988 and iron_box_state == 3:
+                prompt_label = "Iron Box"
+            else:
+                prompt_label = "Shelf"
+            prompt_label_rect = toilet_rect
+
+
+def _draw_label(surface):
+    """Render short object name above (or below if near top) its rect in window coords."""
+    if not prompt_label or not prompt_label_rect:
+        return
+    _SX = WINDOW_RES[0] / VIRTUAL_RES[0]
+    _SY = (WINDOW_RES[1] - 60) / VIRTUAL_RES[1]
+    lx = int(prompt_label_rect.centerx * _SX)
+    txt = cal_day_font.render(prompt_label, True, (255, 255, 255))
+    _half_w = txt.get_width() // 2 + 6
+    lx = max(_half_w, min(WINDOW_RES[0] - _half_w, lx))
+    _th = txt.get_height()
+    _obj_top_px = int(prompt_label_rect.top * _SY)
+    _obj_bot_px = int(prompt_label_rect.bottom * _SY)
+    if _obj_top_px < _th + 10:
+        # Object is near top — show label BELOW the object
+        ly = _obj_bot_px + _th + 6
+    else:
+        ly = max(_th + 4, _obj_top_px - 6)
+    bg = pygame.Surface((txt.get_width() + 8, _th + 4), pygame.SRCALPHA)
+    bg.fill((0, 0, 0, 160))
+    surface.blit(bg, bg.get_rect(midbottom=(lx, ly)))
+    surface.blit(txt, txt.get_rect(midbottom=(lx, ly - 2)))
+
+
+def draw_dialogue_ui(surface):
+    """Draw character bust upper-half (bottom-right) and speech bubble (close to bust)."""
+    _bust_src = player_img_1988_idle if calendar_date == DATE_1988 else player_img_2026_idle
+    _bw = 0
+    if _bust_src:
+        _sw, _sh = _bust_src.get_size()
+        _half_h = _sh // 2
+        _crop = _bust_src.subsurface(pygame.Rect(0, 0, _sw, _half_h))
+        _display_h = _half_h * 3
+        _display_w = int(_sw * _display_h / _half_h)
+        _max_h = WINDOW_RES[1] - 60
+        if _display_h > _max_h:
+            _display_h = _max_h
+            _display_w = int(_sw * _display_h / _half_h)
+        if _display_w > WINDOW_RES[0] // 2:
+            _display_w = WINDOW_RES[0] // 2
+            _display_h = int(_half_h * _display_w / _sw)
+        _bw = _display_w
+        _bust = pygame.transform.scale(_crop, (_display_w, _display_h))
+        _by = WINDOW_RES[1] - 98 - _display_h
+        if _by < 0:
+            _by = 0
+        surface.blit(_bust, (WINDOW_RES[0] - _display_w - 10, _by))
+    _margin = 15
+    _box_w = min(400, WINDOW_RES[0] - _bw - _margin * 3)
+    if _box_w < 200:
+        _box_w = 200
+    _box_h = 165
+    _box_y = WINDOW_RES[1] - 98 - _box_h
+    _box_x = WINDOW_RES[0] - _bw - _box_w - _margin
+    if _box_x < _margin:
+        _box_x = _margin
+    pygame.draw.rect(surface, (20, 20, 35), (_box_x, _box_y, _box_w, _box_h), border_radius=10)
+    pygame.draw.rect(surface, (120, 160, 220), (_box_x, _box_y, _box_w, _box_h), 2, border_radius=10)
+    _txt = cal_day_font.render(dialogue_text, True, (220, 220, 255))
+    surface.blit(_txt, (_box_x + 16, _box_y + 20))
+    if dialogue_has_choices:
+        for _i, _lbl in enumerate(["Yes", "No"]):
+            _col = (255, 220, 60) if _i == dialogue_choice else (160, 160, 160)
+            _prefix = "▶ " if _i == dialogue_choice else "  "
+            _cs = cal_day_font.render(_prefix + _lbl, True, _col)
+            surface.blit(_cs, (_box_x + 16 + _i * 100, _box_y + _box_h - 44))
+    else:
+        _cs = cal_day_font.render("[SPACE to continue]", True, (140, 140, 140))
+        surface.blit(_cs, (_box_x + 16, _box_y + _box_h - 44))
+
+
+def _trigger_action(obj):
+    """Execute the game action after dialogue confirmation."""
+    global ui_state, current_scene, player_x, player_y
+    global room_lights_on, iron_box_state, tetris_cart_spawned, cabinet_message
+    global dialogue_triggered, fighter_message
+    dialogue_triggered = True
+    if obj == "tv":
+        ui_state = "tv"
+    elif obj == "cabinet":
+        ui_state = "cabinet"
+    elif obj == "calendar":
+        ui_state = "calendar"
+        dialogue_triggered = False
+    elif obj == "cartridge":
+        inventory.append("Tetris Cartridge")
+        tetris_cart_spawned = False
+        cabinet_message = "Got Tetris Cartridge from the desk!"
+        dialogue_triggered = False
+    elif obj == "light":
+        room_lights_on = True
+        dialogue_triggered = False
+    elif obj == "bedroom":
+        current_scene = "bedroom"
+        player_x = bedroom_door_rect.left - player_size - 10
+        player_y = bedroom_door_rect.centery - player_size // 2
+        dialogue_triggered = False
+    elif obj == "bathroom":
+        current_scene = "bathroom"
+        player_x = bathroom_exit_rect.right + 10
+        player_y = bathroom_exit_rect.centery - player_size // 2
+        dialogue_triggered = False
+    elif obj == "frontdoor":
+        ui_state = "main_door"
+    elif obj == "livingroom":
+        current_scene = "living_room"
+        player_x = living_door_rect.right + 10
+        player_y = living_door_rect.centery - player_size // 2
+        dialogue_triggered = False
+    elif obj == "bookshelf":
+        ui_state = "bookshelf"
+        dialogue_triggered = False
+    elif obj == "computer":
+        selected_item = inventory[selected_inv_slot] if selected_inv_slot < len(inventory) else None
+        if selected_item == "SF2 Cartridge":
+            ui_state = "computer"
+            init_rt_fighter()
+            fighter_message = ""
+        elif selected_item == "Tetris Cartridge":
+            ui_state = "tetris"
+            init_tetris()
+        else:
+            ui_state = "computer_idle"
+        dialogue_triggered = False
+    elif obj == "exit":
+        current_scene = "living_room"
+        player_x = bathroom_door_rect.left - player_size - 10
+        player_y = bathroom_door_rect.centery - player_size // 2
+        dialogue_triggered = False
+    elif obj == "sink":
+        ui_state = "sink"
+        dialogue_triggered = False
+    elif obj == "pipe":
+        dialogue_triggered = False
+    elif obj == "ironbox":
+        iron_box_state = 1
+        cabinet_message = "Picked up iron box! Place it under the leaking pipe."
+        dialogue_triggered = False
+    elif obj == "ironbox_place":
+        iron_box_state = 2
+        cabinet_message = "Iron box placed under the pipe. Water will rust it..."
+        dialogue_triggered = False
+    elif obj == "ironbox_rusty":
+        ui_state = "iron_box"
+        dialogue_triggered = False
+    elif obj == "shelf":
+        dialogue_triggered = False
+
 
 # Inventory bar helper
 # -------------------------------------------------------------------------
@@ -1220,7 +1307,10 @@ def draw_inventory_bar():
     slot_size = 60
     num_slots = 5
     start_x = (WINDOW_RES[0] - num_slots * (slot_size + 10)) // 2
-    bar_y = WINDOW_RES[1] - 72
+    bar_y = WINDOW_RES[1] - 92
+
+    pygame.draw.rect(screen, (0, 0, 0),
+                     (0, bar_y - 6, WINDOW_RES[0], WINDOW_RES[1] - (bar_y - 6)))
 
     for i in range(num_slots):
         sr = pygame.Rect(start_x + i * (slot_size+10), bar_y, slot_size, slot_size)
@@ -1292,6 +1382,22 @@ while running:
             
         elif event.type == pygame.KEYDOWN:
 
+            if dialogue_active:
+                if event.key in (pygame.K_LEFT, pygame.K_UP):
+                    dialogue_choice = 0
+                elif event.key in (pygame.K_RIGHT, pygame.K_DOWN):
+                    dialogue_choice = 1
+                elif event.key in (pygame.K_SPACE, pygame.K_RETURN):
+                    if dialogue_has_choices and dialogue_choice == 1:
+                        dialogue_active = False
+                    else:
+                        _obj = dialogue_object
+                        dialogue_active = False
+                        _trigger_action(_obj)
+                elif event.key == pygame.K_ESCAPE:
+                    dialogue_active = False
+                continue
+
             if ui_state == "game":
                 if event.key == pygame.K_1: selected_inv_slot = 0
                 elif event.key == pygame.K_2: selected_inv_slot = 1
@@ -1300,80 +1406,55 @@ while running:
                 elif event.key == pygame.K_5: selected_inv_slot = 4
                 
                 elif event.key == pygame.K_SPACE:
-                    fl_active = "Flashlight" in inventory
-
-                    if (calendar_date == DATE_1988 and not room_lights_on
-                            and current_scene == "living_room"
-                            and player_rect.colliderect(light_switch_prox)):
-                        room_lights_on = True
-                                
-                    # Other interactions
+                    _obj = ""
                     if current_scene == "living_room":
-                        if player_rect.colliderect(calendar_proximity_rect):
-                            ui_state = "calendar"
-
-                        # Pick up Tetris cartridge from desk on 8/8
-                        if (tetris_cart_spawned and
-                                player_rect.colliderect(calendar_proximity_rect)):
-                            inventory.append("Tetris Cartridge")
-                            tetris_cart_spawned = False
-                            cabinet_message = "Got Tetris Cartridge from the desk!"
-
-                        if calendar_date == datetime.date(2026, 6, 22):
-                            if player_rect.colliderect(tv_proximity_rect) and calendar_date == datetime.date(2026, 6, 22):
-                                ui_state = "tv"
-                            elif player_rect.colliderect(cabinet_proximity_rect) and calendar_date == datetime.date(2026, 6, 22):
-                                ui_state = "cabinet"
-                            elif player_rect.colliderect(living_door_prox):
-                                current_scene = "bedroom"
-                                player_x = bedroom_door_rect.left - player_size - 10
-                                player_y = bedroom_door_rect.centery - player_size // 2
-                            elif player_rect.colliderect(bathroom_door_prox):
-                                current_scene = "bathroom"
-                                player_x = bathroom_exit_rect.right + 10
-                                player_y = bathroom_exit_rect.centery - player_size // 2
+                        if tetris_cart_spawned and player_rect.colliderect(calendar_proximity_rect):
+                            _obj = "cartridge"
+                        elif player_rect.colliderect(calendar_proximity_rect):
+                            _obj = "calendar"
+                        elif (calendar_date == DATE_1988 and not room_lights_on
+                              and player_rect.colliderect(light_switch_prox)):
+                            _obj = "light"
+                        elif player_rect.colliderect(living_door_prox):
+                            _obj = "bedroom"
+                        elif player_rect.colliderect(bathroom_door_prox):
+                            _obj = "bathroom"
+                        elif calendar_date == datetime.date(2026, 6, 22):
+                            if player_rect.colliderect(tv_proximity_rect):
+                                _obj = "tv"
+                            elif player_rect.colliderect(cabinet_proximity_rect):
+                                _obj = "cabinet"
                             elif player_rect.colliderect(main_door_rect.inflate(32, 32)):
-                                ui_state = "main_door"
-
+                                _obj = "frontdoor"
                     elif current_scene == "bedroom":
                         if player_rect.colliderect(bedroom_door_prox):
-                            current_scene = "living_room"
-                            player_x = living_door_rect.right + 10
-                            player_y = living_door_rect.centery - player_size // 2
+                            _obj = "livingroom"
                         elif player_rect.colliderect(bookshelf_prox):
-                            ui_state = "bookshelf"
+                            _obj = "bookshelf"
                         elif player_rect.colliderect(computer_prox):
-                            selected_item = inventory[selected_inv_slot] if selected_inv_slot < len(inventory) else None
-                            if selected_item == "SF2 Cartridge":
-                                ui_state = "computer"
-                                init_rt_fighter()
-                                fighter_message = ""
-                            elif selected_item == "Tetris Cartridge":
-                                ui_state = "tetris"
-                                init_tetris()
-                            else:
-                                ui_state = "computer_idle"
-
+                            _obj = "computer"
                     elif current_scene == "bathroom":
                         if player_rect.colliderect(bathroom_exit_prox):
-                            current_scene = "living_room"
-                            player_x = bathroom_door_rect.left - player_size - 10
-                            player_y = bathroom_door_rect.centery - player_size // 2
+                            _obj = "exit"
                         elif player_rect.colliderect(sink_rect.inflate(32, 32)):
-                            ui_state = "sink"
+                            _obj = "sink"
                         elif player_rect.colliderect(pipe_rect.inflate(20, 20)):
-                            # 1988: place iron box under leaking pipe
                             if calendar_date == DATE_1988 and iron_box_state == 1:
-                                iron_box_state = 2
-                                cabinet_message = "Iron box placed under the pipe. Water will rust it..."
+                                _obj = "ironbox_place"
+                            else:
+                                _obj = "pipe"
                         elif player_rect.colliderect(toilet_rect.inflate(32, 32)):
                             if calendar_date == DATE_1988 and iron_box_state == 0:
-                                # 1988: pick up iron box from shelf
-                                iron_box_state = 1
-                                cabinet_message = "Picked up iron box! Place it under the leaking pipe."
+                                _obj = "ironbox"
                             elif calendar_date != DATE_1988 and iron_box_state == 3:
-                                # 2026: inspect rusty iron box
-                                ui_state = "iron_box"
+                                _obj = "ironbox_rusty"
+                            else:
+                                _obj = "shelf"
+                    if _obj and _obj in DIALOGUE_MAP:
+                        dialogue_active = True
+                        dialogue_object = _obj
+                        dialogue_text, dialogue_has_choices = DIALOGUE_MAP[_obj]
+                        dialogue_choice = 0
                         
             elif ui_state == "computer_idle":
                 if event.key == pygame.K_ESCAPE:
@@ -1413,12 +1494,13 @@ while running:
             elif ui_state == "tv":
                 if event.key in (pygame.K_SPACE, pygame.K_ESCAPE):
                     ui_state = "game"
-            
+                    dialogue_triggered = False
 
             elif ui_state == "cabinet":
                 if event.key == pygame.K_ESCAPE:
                     cabinet_item_pending = None
                     ui_state = "game"
+                    dialogue_triggered = False
                 elif event.key == pygame.K_UP:
                     cabinet_selection = 0; cabinet_message = ""
                 elif event.key == pygame.K_DOWN:
@@ -1604,10 +1686,16 @@ while running:
     old_x, old_y = player_x, player_y
 
     if ui_state == "game":
-        if keys[pygame.K_LEFT] or keys[pygame.K_a]: player_x -= player_speed
-        if keys[pygame.K_RIGHT] or keys[pygame.K_d]: player_x += player_speed
-        if keys[pygame.K_UP] or keys[pygame.K_w]: player_y -= player_speed
-        if keys[pygame.K_DOWN] or keys[pygame.K_s]: player_y += player_speed
+        _moved = False
+        if keys[pygame.K_LEFT] or keys[pygame.K_a]:
+            player_x -= player_speed; player_dir = "left"; _moved = True
+        if keys[pygame.K_RIGHT] or keys[pygame.K_d]:
+            player_x += player_speed; player_dir = "right"; _moved = True
+        if keys[pygame.K_UP] or keys[pygame.K_w]:
+            player_y -= player_speed; player_dir = "up"; _moved = True
+        if keys[pygame.K_DOWN] or keys[pygame.K_s]:
+            player_y += player_speed; player_dir = "down"; _moved = True
+        player_moving = _moved
 
     elif ui_state == "computer" and fighter_state == "fighting":
         if rt_p1["state"] != "attacking":
@@ -1718,9 +1806,9 @@ while running:
                         tetris_game_over = True
             tetris_fall_time = now
 
-    # Clamp
-    player_x = max(0, min(player_x, VIRTUAL_RES[0] - player_size))
-    player_y = max(_PLAYER_MIN_Y, min(player_y, VIRTUAL_RES[1] - player_size))
+    # Clamp to room interior (12px wall border on all sides)
+    player_x = max(12, min(player_x, VIRTUAL_RES[0] - 12 - player_size))
+    player_y = max(_PLAYER_MIN_Y, min(player_y, VIRTUAL_RES[1] - 12 - player_size))
 
     # Collision
     player_rect = pygame.Rect(player_x, player_y, player_size, player_size)
@@ -1787,6 +1875,21 @@ while running:
 
         screen.blit(render_1988_scene(px_1080, py_1080, pS_1080, fl_active), (0, 0))
 
+        _1988_walk = {
+            "down": player_img_1988_walk_down, "up": player_img_1988_walk_up,
+            "left": player_img_1988_walk_left, "right": player_img_1988_walk_right,
+        }
+        _1988_sprite = _1988_walk.get(player_dir) if player_moving else player_img_1988_idle
+        if _1988_sprite is None:
+            _1988_sprite = player_img_1988_idle
+        if _1988_sprite:
+            _SX = WINDOW_RES[0] / VIRTUAL_RES[0]
+            _SY = (WINDOW_RES[1] - 60) / VIRTUAL_RES[1]
+            _iw, _ih = _1988_sprite.get_size()
+            _cx = int(player_x * _SX + player_size * _SX / 2)
+            _bot = int(player_y * _SY + player_size * _SY)
+            screen.blit(_1988_sprite, (_cx - _iw // 2, _bot - _ih))
+
         if not room_lights_on:
             if current_scene == "living_room":
                 hint = high_res_inst_font.render(
@@ -1805,6 +1908,11 @@ while running:
                     True, (150, 150, 150))
             screen.blit(hint, hint.get_rect(center=(WINDOW_RES[0]//2, WINDOW_RES[1]-200)))
 
+        _do_proximity_check()
+        if prompt_label and prompt_label_rect:
+            _draw_label(screen)
+        if dialogue_active:
+            draw_dialogue_ui(screen)
         draw_inventory_bar()
         pygame.display.flip()
         clock.tick(60)
@@ -2073,89 +2181,37 @@ while running:
     screen.blit(scaled_surface, (0, 0))
 
     # High-res player drawn first so wall furniture appears in front
-    if player_img:
+    _is_1988 = (calendar_date == DATE_1988)
+    _idle_img = player_img_1988_idle if _is_1988 else player_img_2026_idle
+    _walk_map = {
+        "down":  player_img_1988_walk_down  if _is_1988 else player_img_2026_walk_down,
+        "up":    player_img_1988_walk_up    if _is_1988 else player_img_2026_walk_up,
+        "left":  player_img_1988_walk_left  if _is_1988 else player_img_2026_walk_left,
+        "right": player_img_1988_walk_right if _is_1988 else player_img_2026_walk_right,
+    }
+    _psprite = _walk_map.get(player_dir) if player_moving else _idle_img
+    if _psprite is None:
+        _psprite = _idle_img
+    if _psprite:
         _SX = WINDOW_RES[0] / VIRTUAL_RES[0]
         _SY = (WINDOW_RES[1] - 60) / VIRTUAL_RES[1]
-        _img_w, _img_h = player_img.get_size()
+        _iw, _ih = _psprite.get_size()
         _cx = int(player_x * _SX + player_size * _SX / 2)
         _bot = int(player_y * _SY + player_size * _SY)
-        screen.blit(player_img, (_cx - _img_w // 2, _bot - _img_h))
+        screen.blit(_psprite, (_cx - _iw // 2, _bot - _ih))
     else:
         draw_retro_player_hires(screen, player_x, player_y)
-
-    # Depth layering: re-blit front-layer portion of bg over player when player is behind it
-    _SX_d = WINDOW_RES[0] / VIRTUAL_RES[0]
-    _SY_d = (WINDOW_RES[1] - 60) / VIRTUAL_RES[1]
-    if current_scene == "living_room" and _use_hires_bg:
-        if player_y < sofa_rect.y:
-            _front_top = int(sofa_rect.y * _SY_d)
-            _front_area = pygame.Rect(0, _front_top, _HIRES[0], _HIRES[1] - _front_top)
-            screen.blit(_use_hires_bg, (0, _front_top), _front_area)
-    elif current_scene == "bedroom" and _use_hires_bg:
-        if player_y < computer_desk_rect.y:
-            _front_top = int(computer_desk_rect.y * _SY_d)
-            _front_area = pygame.Rect(0, _front_top, _HIRES[0], _HIRES[1] - _front_top)
-            screen.blit(_use_hires_bg, (0, _front_top), _front_area)
 
     # High-res sofa (living room only, fallback only when no hires bg)
     if current_scene == "living_room" and not _use_hires_bg and calendar_date == datetime.date(2026, 6, 22):
         draw_sofa_hires(screen, sofa_rect)
 
-    # Interaction prompts
-    prompt_text = ""
-    if ui_state == "game":
-        if current_scene == "living_room":
-            if tetris_cart_spawned and player_rect.colliderect(calendar_proximity_rect):
-                prompt_text = "SPACE to take Tetris Cartridge from desk"
-            elif player_rect.colliderect(calendar_proximity_rect):
-                prompt_text = "SPACE: Open Calendar (Time Travel)"
-            elif calendar_date == datetime.date(2026, 6, 22):
-                if player_rect.colliderect(tv_proximity_rect):
-                    prompt_text = "SPACE to watch TV"
-                elif player_rect.colliderect(cabinet_proximity_rect):
-                    prompt_text = "SPACE to open Cabinet"
-                elif player_rect.colliderect(main_door_rect.inflate(32, 32)):
-                    prompt_text = "SPACE to inspect Main Door"
-                elif player_rect.colliderect(living_door_prox):
-                    prompt_text = "SPACE to enter Bedroom"
-                elif player_rect.colliderect(bathroom_door_prox):
-                    prompt_text = "SPACE to enter Bathroom"
-                elif player_rect.colliderect(light_switch_prox) and calendar_date == DATE_1988 and not room_lights_on:
-                    prompt_text = "SPACE to flip light switch"
-        elif current_scene == "bedroom":
-            if player_rect.colliderect(bedroom_door_prox):
-                prompt_text = "SPACE to enter Living Room"
-            elif player_rect.colliderect(bookshelf_prox):
-                prompt_text = "SPACE to inspect Bookshelf"
-            elif player_rect.colliderect(computer_prox):
-                prompt_text = "SPACE to use Computer"
-        elif current_scene == "bathroom":
-            if player_rect.colliderect(bathroom_exit_prox):
-                prompt_text = "SPACE to exit Bathroom"
-            elif player_rect.colliderect(sink_rect.inflate(32, 32)):
-                prompt_text = "SPACE to inspect Sink"
-            elif player_rect.colliderect(pipe_rect.inflate(20, 20)):
-                if calendar_date == DATE_1988 and iron_box_state == 1:
-                    prompt_text = "SPACE to place iron box under leaking pipe"
-                else:
-                    prompt_text = "Leaking pipe..."
-            elif player_rect.colliderect(toilet_rect.inflate(32, 32)):
-                if calendar_date == DATE_1988 and iron_box_state == 0:
-                    prompt_text = "SPACE to pick up iron box"
-                elif calendar_date != DATE_1988 and iron_box_state == 3:
-                    prompt_text = "SPACE to inspect rusty iron box"
-                else:
-                    prompt_text = "SPACE to inspect Shelf"
-
-    if prompt_text:
-        pt = high_res_inst_font.render(prompt_text, True, (255, 255, 255), (0, 0, 0))
-        sx = int(player_x * WINDOW_RES[0] / VIRTUAL_RES[0])
-        sy = int((player_y - player_size/2) * (WINDOW_RES[1] - 60) / VIRTUAL_RES[1])
-        pt_rect = pt.get_rect(midbottom=(sx, sy))
-        pt_rect.left  = max(4, pt_rect.left)
-        pt_rect.right = min(WINDOW_RES[0] - 4, pt_rect.right)
-        pt_rect.top   = max(4, pt_rect.top)
-        screen.blit(pt, pt_rect)
+    # Object label & dialogue overlay
+    _do_proximity_check()
+    if prompt_label and prompt_label_rect:
+        _draw_label(screen)
+    if dialogue_active:
+        draw_dialogue_ui(screen)
 
     # UI Overlays
     if ui_state == "calendar":
@@ -2165,15 +2221,44 @@ while running:
         overlay = pygame.Surface(WINDOW_RES, pygame.SRCALPHA)
         overlay.fill((0, 0, 0, 200))
         screen.blit(overlay, (0, 0))
-        
-        if tv_image:
-            screen.blit(pygame.transform.scale(tv_image, (WINDOW_RES[0] - 200, WINDOW_RES[1] - 200)), (100, 100))
+        if dialogue_triggered:
+            _bust_src = player_img_1988_idle if calendar_date == DATE_1988 else player_img_2026_idle
+            _bw = 120
+            if _bust_src:
+                _sw, _sh = _bust_src.get_size()
+                _half_h = _sh // 2
+                _crop = _bust_src.subsurface(pygame.Rect(0, 0, _sw, _half_h))
+                _display_h = _half_h * 3
+                _display_w = int(_sw * _display_h / _half_h)
+                _max_h = WINDOW_RES[1] - 60
+                if _display_h > _max_h:
+                    _display_h = _max_h
+                    _display_w = int(_sw * _display_h / _half_h)
+                if _display_w > WINDOW_RES[0] // 2:
+                    _display_w = WINDOW_RES[0] // 2
+                    _display_h = int(_half_h * _display_w / _sw)
+                _bw = _display_w
+                _bust = pygame.transform.scale(_crop, (_display_w, _display_h))
+                _by = WINDOW_RES[1] - 98 - _display_h
+                if _by < 0:
+                    _by = 0
+                screen.blit(_bust, (WINDOW_RES[0] - _display_w - 10, _by))
+            _tw = int((WINDOW_RES[0] - _bw - 80) * 0.85)
+            _th = int((WINDOW_RES[1] - 160) * 0.75)
+            _tx, _ty = 40, (WINDOW_RES[1] - _th) // 2
+            if tv_image:
+                screen.blit(pygame.transform.scale(tv_image, (_tw, _th)), (_tx, _ty))
+            else:
+                pygame.draw.rect(screen, (40, 40, 40), (_tx, _ty, _tw, _th))
+            ts = high_res_big_font.render("TV is ON", True, (255, 255, 255))
+            screen.blit(ts, ts.get_rect(center=(_tx + _tw // 2, _ty + _th // 2)))
         else:
-            pygame.draw.rect(screen, (40, 40, 40), (100, 100, WINDOW_RES[0] - 200, WINDOW_RES[1] - 200))
-            
-        ts = high_res_big_font.render("TV is ON", True, (255, 255, 255))
-        screen.blit(ts, ts.get_rect(center=(WINDOW_RES[0]//2, WINDOW_RES[1]//2)))
-        
+            if tv_image:
+                screen.blit(pygame.transform.scale(tv_image, (WINDOW_RES[0] - 200, WINDOW_RES[1] - 200)), (100, 100))
+            else:
+                pygame.draw.rect(screen, (40, 40, 40), (100, 100, WINDOW_RES[0] - 200, WINDOW_RES[1] - 200))
+            ts = high_res_big_font.render("TV is ON", True, (255, 255, 255))
+            screen.blit(ts, ts.get_rect(center=(WINDOW_RES[0]//2, WINDOW_RES[1]//2)))
         inst = high_res_inst_font.render("SPACE or ESC to close", True, (200, 200, 200))
         screen.blit(inst, inst.get_rect(center=(WINDOW_RES[0]//2, WINDOW_RES[1]-130)))
 
@@ -2220,6 +2305,13 @@ while running:
             screen.blit(msg, msg.get_rect(center=(WINDOW_RES[0] // 2, _dy + _dh + 28)))
         inst = high_res_inst_font.render("Up/Dn: Select | SPACE: Open/Interact | ESC: Close", True, (220, 220, 220))
         screen.blit(inst, inst.get_rect(center=(WINDOW_RES[0] // 2, WINDOW_RES[1] - 110)))
+        if dialogue_triggered:
+            _bust_src = player_img_1988_idle if calendar_date == DATE_1988 else player_img_2026_idle
+            if _bust_src:
+                _bh = 200
+                _bw = int(_bust_src.get_width() * _bh / _bust_src.get_height())
+                _bust = pygame.transform.scale(_bust_src, (_bw, _bh))
+                screen.blit(_bust, (WINDOW_RES[0] - _bw - 10, WINDOW_RES[1] - 60 - _bh))
 
     elif ui_state == "computer_idle":
         overlay = pygame.Surface(WINDOW_RES, pygame.SRCALPHA)
@@ -2402,8 +2494,9 @@ while running:
             msg = high_res_inst_font.render("A strange memory surfaces... (Easter Egg Place)", True, (200, 200, 200))
             screen.blit(msg, msg.get_rect(center=(WINDOW_RES[0]//2, 50)))
 
-    # Inventory bar
-    draw_inventory_bar()
+    # Inventory bar (hidden when calendar is open)
+    if ui_state != "calendar":
+        draw_inventory_bar()
 
     # HUD notification: show cabinet_message above inventory when in game
     if ui_state == "game" and cabinet_message:
