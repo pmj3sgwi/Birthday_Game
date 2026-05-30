@@ -293,7 +293,7 @@ DIALOGUE_MAP = {
     "ironbox_place":("Should I put this under the pipe?",       True),
     "ironbox_rusty":("This box is rusty... Can I open it?",     True),
     "shelf":        ("Should I inspect the shelf?",             True),
-    "mirror":       ("Should I breathe on the mirror?",         True),
+    "mirror":       ("Should I look at the mirror?",             True),
     "bathtub":      ("Should I fill the bathtub?",              True),
 }
 
@@ -316,6 +316,7 @@ bathtub_rect      = pygame.Rect(230, 60, 75, 80)   # 浴缸（右側），待 F1
 bathtub_state     = 0    # 0=空, 1=冷水, 2=熱水
 bathtub_selection = 0    # 0=熱水, 1=冷水
 mirror_breath_timer = 0  # >0 時顯示呼氣霧
+mirror_fogged_in_ui = False  # True once player breathes inside mirror UI
 # Tetris constants & state
 # -------------------------------------------------------------------------
 TETRIS_W = 10
@@ -483,7 +484,18 @@ try:
     mirror_img = pygame.image.load(
         get_resource_path(os.path.join("picture", "Mirror_去背.png"))).convert_alpha()
 except Exception as e:
+    print(f"Could not load Mirror_去背.png: {e}")
+mirror_clear_img = mirror_fog_img = None
+try:
+    mirror_clear_img = pygame.image.load(
+        get_resource_path(os.path.join("picture", "鏡子_去背.png"))).convert_alpha()
+except Exception as e:
     print(f"Could not load 鏡子_去背.png: {e}")
+try:
+    mirror_fog_img = pygame.image.load(
+        get_resource_path(os.path.join("picture", "鏡子_微霧_去背.png"))).convert_alpha()
+except Exception as e:
+    print(f"Could not load 鏡子_微霧_去背.png: {e}")
 cab_img_closed = cab_img_l1 = cab_img_l2 = None
 for _cab_name, _cab_key in [("客廳櫃_去背.png", "closed"),
                               ("客廳櫃_L1_去背.png", "l1"),
@@ -1168,7 +1180,7 @@ def _do_proximity_check():
             prompt_label = "Exit"
             prompt_label_rect = bathroom_exit_rect
         elif (calendar_date != DATE_1988 and
-              player_rect.colliderect(mirror_rect.inflate(16, 16))):
+              player_rect.colliderect(mirror_rect.inflate(24, 32))):
             prompt_label = "Mirror"
             prompt_label_rect = mirror_rect
         elif (calendar_date != DATE_1988 and
@@ -1295,7 +1307,7 @@ def _trigger_action(obj):
     """Execute the game action after dialogue confirmation."""
     global ui_state, current_scene, player_x, player_y
     global room_lights_on, iron_box_state, tetris_cart_spawned, cabinet_message, _msg_timer
-    global dialogue_triggered, fighter_message, bathtub_state, mirror_breath_timer
+    global dialogue_triggered, fighter_message, bathtub_state, mirror_breath_timer, mirror_fogged_in_ui
     dialogue_triggered = True
     if obj == "tv":
         ui_state = "tv"
@@ -1368,7 +1380,8 @@ def _trigger_action(obj):
     elif obj == "shelf":
         dialogue_triggered = False
     elif obj == "mirror":
-        mirror_breath_timer = 120   # 2 seconds of breath fog @ 60fps
+        ui_state = "mirror"
+        mirror_fogged_in_ui = False
         dialogue_triggered = False
     elif obj == "bathtub":
         ui_state = "bathtub_fill"
@@ -1531,7 +1544,7 @@ while running:
                         if player_rect.colliderect(bathroom_exit_prox):
                             _obj = "exit"
                         elif (calendar_date != DATE_1988 and
-                              player_rect.colliderect(mirror_rect.inflate(16, 16))):
+                              player_rect.colliderect(mirror_rect.inflate(24, 32))):
                             _obj = "mirror"
                         elif (calendar_date != DATE_1988 and
                               player_rect.colliderect(bathtub_rect.inflate(16, 16))):
@@ -1777,6 +1790,19 @@ while running:
                         inventory.append("Strange Cube 2")
                         cabinet_message = "Broke open the rusty iron box! Found a strange cube!"; _msg_timer = 180
                         ui_state = "game"
+
+            elif ui_state == "mirror":
+                if event.key == pygame.K_ESCAPE:
+                    ui_state = "game"
+                    mirror_fogged_in_ui = False
+                elif event.key == pygame.K_SPACE:
+                    if not mirror_fogged_in_ui:
+                        mirror_fogged_in_ui = True
+                        mirror_breath_timer = 120   # in-world fog timer
+                    else:
+                        ui_state = "game"
+                        mirror_fogged_in_ui = False
+                        pygame.event.clear(pygame.KEYDOWN)
 
             elif ui_state == "bathtub_fill":
                 if event.key == pygame.K_ESCAPE:
@@ -2210,25 +2236,17 @@ while running:
                     _dh = max(2, _dw * 2 + 1)
                     pygame.draw.ellipse(display_surface, (130, 195, 235),
                                         (_drop_cx - _dw, _dy - _dh, _dw * 2, _dh * 2))
-            # Mirror fog overlay (2026 only)
-            if calendar_date != DATE_1988 and mirror_img:
+            # Mirror fog overlay (2026 only) — use actual fog image
+            if calendar_date != DATE_1988 and (bathtub_state == 2 or mirror_breath_timer > 0):
                 _SX_m = WINDOW_RES[0] / VIRTUAL_RES[0]
                 _SY_m = (WINDOW_RES[1] - 60) / VIRTUAL_RES[1]
                 _mx = int(mirror_rect.x * _SX_m)
                 _my = int(mirror_rect.y * _SY_m)
                 _mw = int(mirror_rect.w * _SX_m)
                 _mh = int(mirror_rect.h * _SY_m)
-                _m_scaled = pygame.transform.scale(mirror_img, (_mw, _mh))
-                if bathtub_state == 2:           # hot water — full permanent fog
-                    _fog = pygame.Surface((_mw, _mh), pygame.SRCALPHA)
-                    _fog.fill((255, 255, 255, 210))
-                    screen.blit(_m_scaled, (_mx, _my))
-                    screen.blit(_fog, (_mx, _my))
-                elif mirror_breath_timer > 0:    # breath — short fog
-                    _fog = pygame.Surface((_mw, _mh), pygame.SRCALPHA)
-                    _fog.fill((255, 255, 255, 155))
-                    screen.blit(_m_scaled, (_mx, _my))
-                    screen.blit(_fog, (_mx, _my))
+                _fog_src = mirror_fog_img or mirror_img
+                if _fog_src:
+                    screen.blit(pygame.transform.scale(_fog_src, (_mw, _mh)), (_mx, _my))
         else:
             # White tile floor
             display_surface.fill((215, 220, 230))
@@ -2391,6 +2409,26 @@ while running:
         _hint = cal_inst_font.render(
             "Left/Right: Choose   SPACE: Confirm   ESC: Cancel", True, (110, 110, 110))
         screen.blit(_hint, _hint.get_rect(center=(WINDOW_RES[0]//2, WINDOW_RES[1]//2 + 110)))
+
+    elif ui_state == "mirror":
+        overlay = pygame.Surface(WINDOW_RES, pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 210))
+        screen.blit(overlay, (0, 0))
+        _mimg = mirror_fog_img if mirror_fogged_in_ui else mirror_clear_img
+        if _mimg:
+            _avail_w = WINDOW_RES[0] - 160
+            _avail_h = WINDOW_RES[1] - 200
+            _ratio = _mimg.get_width() / _mimg.get_height()
+            _mw2 = min(_avail_w, int(_avail_h * _ratio))
+            _mh2 = int(_mw2 / _ratio)
+            _mx3 = (WINDOW_RES[0] - _mw2) // 2
+            _my3 = (WINDOW_RES[1] - _mh2) // 2
+            screen.blit(pygame.transform.scale(_mimg, (_mw2, _mh2)), (_mx3, _my3))
+        if mirror_fogged_in_ui:
+            _hint2 = cal_inst_font.render("SPACE: Close", True, (160, 160, 160))
+        else:
+            _hint2 = cal_inst_font.render("SPACE: Breathe   ESC: Close", True, (160, 160, 160))
+        screen.blit(_hint2, _hint2.get_rect(center=(WINDOW_RES[0]//2, WINDOW_RES[1] - 80)))
 
     elif ui_state == "cabinet":
         overlay = pygame.Surface(WINDOW_RES, pygame.SRCALPHA)
