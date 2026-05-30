@@ -2106,17 +2106,6 @@ while running:
             # 背景圖含所有家具；只畫動態 overlay
             if tetris_cart_spawned:
                 draw_cartridge_icon(display_surface, tetris_cart_rect, (50, 200, 80))
-            # Cabinet state overlay (show correct drawer image)
-            _ci = _cab_current_img()
-            if _ci and calendar_date != DATE_1988:
-                _SX_c2 = WINDOW_RES[0] / VIRTUAL_RES[0]
-                _SY_c2 = (WINDOW_RES[1] - 60) / VIRTUAL_RES[1]
-                _cab_bx = int(cabinet_rect.x * _SX_c2)
-                _cab_by2 = int(cabinet_rect.bottom * _SY_c2)
-                _cab_h2 = int(cabinet_rect.h * _SY_c2 * 3.5)
-                _cab_w2 = int(_ci.get_width() * _cab_h2 / _ci.get_height())
-                screen.blit(pygame.transform.scale(_ci, (_cab_w2, _cab_h2)),
-                            (_cab_bx, _cab_by2 - _cab_h2))
         else:
             # 1988 或無圖 fallback：全部程式碼繪製
             draw_desk_and_calendar(display_surface)
