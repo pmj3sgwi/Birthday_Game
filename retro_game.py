@@ -162,6 +162,9 @@ def draw_sink(surface, rect):
 # Pygame Init
 # -------------------------------------------------------------------------
 pygame.init()
+# Block mouse events to prevent event queue overflow (which silently drops KEYDOWN events)
+pygame.event.set_blocked([pygame.MOUSEMOTION, pygame.MOUSEBUTTONDOWN,
+                           pygame.MOUSEBUTTONUP, pygame.MOUSEWHEEL])
 
 VIRTUAL_RES      = (320, 240)
 VIRTUAL_RES_1080 = (1920, 1080)
@@ -245,6 +248,8 @@ cabinet_item_pending = None  # item visible in open drawer, not yet picked up
 has_flashlight    = False
 has_key           = False
 cabinet_message   = ""
+_msg_timer        = 0    # frames until cabinet_message auto-clears
+debug_rects       = False  # F1 to toggle collision rect overlay
 inventory         = []
 
 DATE_1988         = datetime.date(1988, 6, 22)
@@ -1175,6 +1180,26 @@ def _draw_label(surface):
     surface.blit(txt, txt.get_rect(midbottom=(lx, ly - 2)))
 
 
+def _draw_debug_rects(surface):
+    """Overlay collision rects in red for visual calibration (toggle with F1)."""
+    _SX = WINDOW_RES[0] / VIRTUAL_RES[0]
+    _SY = (WINDOW_RES[1] - 60) / VIRTUAL_RES[1]
+    if current_scene == "living_room":
+        rects = [desk_rect, tv_rect, cabinet_rect, living_door_rect,
+                 bathroom_door_rect, main_door_rect, sofa_rect]
+    elif current_scene == "bedroom":
+        rects = [bedroom_door_rect, bookshelf_rect, computer_desk_rect]
+    else:  # bathroom
+        rects = [bathroom_exit_rect, pipe_rect, sink_rect, toilet_rect]
+    for r in rects:
+        pygame.draw.rect(surface, (255, 0, 0),
+                         (int(r.x * _SX), int(r.y * _SY),
+                          int(r.w * _SX), int(r.h * _SY)), 2)
+        lbl = pygame.font.SysFont("consolas", 14).render(
+            f"({r.x},{r.y},{r.w},{r.h})", True, (255, 200, 0))
+        surface.blit(lbl, (int(r.x * _SX), int(r.y * _SY) - 16))
+
+
 def draw_dialogue_ui(surface):
     """Draw character bust (upper body + thighs) at bottom-right and speech bubble."""
     _bust_src = player_img_1988_idle if calendar_date == DATE_1988 else player_img_2026_idle
@@ -1225,7 +1250,7 @@ def draw_dialogue_ui(surface):
 def _trigger_action(obj):
     """Execute the game action after dialogue confirmation."""
     global ui_state, current_scene, player_x, player_y
-    global room_lights_on, iron_box_state, tetris_cart_spawned, cabinet_message
+    global room_lights_on, iron_box_state, tetris_cart_spawned, cabinet_message, _msg_timer
     global dialogue_triggered, fighter_message
     dialogue_triggered = True
     if obj == "tv":
@@ -1238,7 +1263,7 @@ def _trigger_action(obj):
     elif obj == "cartridge":
         inventory.append("Tetris Cartridge")
         tetris_cart_spawned = False
-        cabinet_message = "Got Tetris Cartridge from the desk!"
+        cabinet_message = "Got Tetris Cartridge from the desk!"; _msg_timer = 180
         dialogue_triggered = False
     elif obj == "light":
         room_lights_on = True
@@ -1287,11 +1312,11 @@ def _trigger_action(obj):
         dialogue_triggered = False
     elif obj == "ironbox":
         iron_box_state = 1
-        cabinet_message = "Picked up iron box! Place it under the leaking pipe."
+        cabinet_message = "Picked up iron box! Place it under the leaking pipe."; _msg_timer = 180
         dialogue_triggered = False
     elif obj == "ironbox_place":
         iron_box_state = 2
-        cabinet_message = "Iron box placed under the pipe. Water will rust it..."
+        cabinet_message = "Iron box placed under the pipe. Water will rust it..."; _msg_timer = 180
         dialogue_triggered = False
     elif obj == "ironbox_rusty":
         ui_state = "iron_box"
@@ -1366,6 +1391,12 @@ while running:
     if dialogue_active and ui_state != "game":
         dialogue_active = False
 
+    # Auto-clear cabinet_message after timer expires
+    if _msg_timer > 0:
+        _msg_timer -= 1
+    elif cabinet_message:
+        cabinet_message = ""
+
     # Proximity rects
     calendar_proximity_rect = pygame.Rect(
         desk_rect.centerx - 12, desk_rect.centery - 12, 24, 24).inflate(12, 16)
@@ -1403,6 +1434,9 @@ while running:
                 elif event.key == pygame.K_ESCAPE:
                     dialogue_active = False
                 continue
+
+            if event.key == pygame.K_F1:
+                debug_rects = not debug_rects
 
             if ui_state == "game":
                 if event.key == pygame.K_1: selected_inv_slot = 0
@@ -1508,45 +1542,45 @@ while running:
                     ui_state = "game"
                     dialogue_triggered = False
                 elif event.key == pygame.K_UP:
-                    cabinet_selection = 0; cabinet_message = ""
+                    cabinet_selection = 0; cabinet_message = ""; _msg_timer = 0
                 elif event.key == pygame.K_DOWN:
-                    cabinet_selection = 1; cabinet_message = ""
+                    cabinet_selection = 1; cabinet_message = ""; _msg_timer = 0
                 elif event.key == pygame.K_SPACE:
                     # If an item is visible and waiting to be picked up, pick it up
                     if cabinet_item_pending:
                         inventory.append(cabinet_item_pending)
                         if cabinet_item_pending == "Flashlight":
                             has_flashlight = True
-                        cabinet_message = f"Got {cabinet_item_pending}!"
+                        cabinet_message = f"Got {cabinet_item_pending}!"; _msg_timer = 180
                         cabinet_item_pending = None
                     elif cabinet_selection == 0:
                         if not cabinet_drawer1_open:
                             cabinet_drawer1_open = True
                             if not has_flashlight:
                                 cabinet_item_pending = "Flashlight"
-                                cabinet_message = "Flashlight is here! SPACE to take it."
+                                cabinet_message = "Flashlight is here! SPACE to take it."; _msg_timer = 180
                             else:
-                                cabinet_message = "Drawer is empty."
+                                cabinet_message = "Drawer is empty."; _msg_timer = 180
                         else:
                             if not has_flashlight:
                                 cabinet_item_pending = "Flashlight"
-                                cabinet_message = "Flashlight is here! SPACE to take it."
+                                cabinet_message = "Flashlight is here! SPACE to take it."; _msg_timer = 180
                             else:
-                                cabinet_message = "Drawer is empty."
+                                cabinet_message = "Drawer is empty."; _msg_timer = 180
                     elif cabinet_selection == 1:
                         if not cabinet_drawer2_open:
                             if has_key:
                                 cabinet_drawer2_open = True
                                 cabinet_item_pending = "Remote"
-                                cabinet_message = "Unlocked! Remote is here! SPACE to take it."
+                                cabinet_message = "Unlocked! Remote is here! SPACE to take it."; _msg_timer = 180
                             else:
-                                cabinet_message = "Locked! Need a key."
+                                cabinet_message = "Locked! Need a key."; _msg_timer = 180
                         else:
                             if "Remote" not in inventory and cabinet_drawer2_open:
                                 cabinet_item_pending = "Remote"
-                                cabinet_message = "Remote is here! SPACE to take it."
+                                cabinet_message = "Remote is here! SPACE to take it."; _msg_timer = 180
                             else:
-                                cabinet_message = "Drawer is empty."
+                                cabinet_message = "Drawer is empty."; _msg_timer = 180
 
             elif ui_state == "calendar":
                 if event.key == pygame.K_ESCAPE:
@@ -1654,7 +1688,7 @@ while running:
                         if bookshelf_unlocked and "SF2 Cartridge" not in inventory:
                             inventory.append("SF2 Cartridge")
                             ui_state = "game"
-                            cabinet_message = "Got SF2 Cartridge!"
+                            cabinet_message = "Got SF2 Cartridge!"; _msg_timer = 180
 
                     if bookshelf_order == ["Blue", "Green", "Red"] and not bookshelf_unlocked:
                         bookshelf_unlocked = True
@@ -1684,7 +1718,7 @@ while running:
                     if iron_box_state == 3:
                         iron_box_state = 4
                         inventory.append("Strange Cube 2")
-                        cabinet_message = "Broke open the rusty iron box! Found a strange cube!"
+                        cabinet_message = "Broke open the rusty iron box! Found a strange cube!"; _msg_timer = 180
                         ui_state = "game"
 
     # Player movement
@@ -1919,6 +1953,8 @@ while running:
             _draw_label(screen)
         if dialogue_active:
             draw_dialogue_ui(screen)
+        if debug_rects:
+            _draw_debug_rects(screen)
         draw_inventory_bar()
         pygame.display.flip()
         clock.tick(60)
@@ -2227,44 +2263,21 @@ while running:
         overlay = pygame.Surface(WINDOW_RES, pygame.SRCALPHA)
         overlay.fill((0, 0, 0, 200))
         screen.blit(overlay, (0, 0))
-        if dialogue_triggered:
-            _bust_src = player_img_1988_idle if calendar_date == DATE_1988 else player_img_2026_idle
-            _bw = 120
-            if _bust_src:
-                _sw, _sh = _bust_src.get_size()
-                _crop_h = int(_sh * 0.65)   # top 65% — includes thighs
-                _crop = _bust_src.subsurface(pygame.Rect(0, 0, _sw, _crop_h))
-                _display_h = _crop_h * 9
-                _display_w = int(_sw * _display_h / _crop_h)
-                _max_h = WINDOW_RES[1] - 60
-                if _display_h > _max_h:
-                    _display_h = _max_h
-                    _display_w = int(_sw * _display_h / _crop_h)
-                if _display_w > WINDOW_RES[0] // 2:
-                    _display_w = WINDOW_RES[0] // 2
-                    _display_h = int(_crop_h * _display_w / _sw)
-                _bw = _display_w
-                _bust = pygame.transform.scale(_crop, (_display_w, _display_h))
-                _by = WINDOW_RES[1] - 98 - _display_h
-                if _by < 0:
-                    _by = 0
-                screen.blit(_bust, (WINDOW_RES[0] - _display_w - 10, _by))
-            _tw = int((WINDOW_RES[0] - _bw - 80) * 0.85)
-            _th = int((WINDOW_RES[1] - 160) * 0.75)
-            _tx, _ty = 40, (WINDOW_RES[1] - _th) // 2
-            if tv_image:
-                screen.blit(pygame.transform.scale(tv_image, (_tw, _th)), (_tx, _ty))
-            else:
-                pygame.draw.rect(screen, (40, 40, 40), (_tx, _ty, _tw, _th))
+        _avail_w = WINDOW_RES[0] - 200
+        _avail_h = WINDOW_RES[1] - 200
+        if tv_image:
+            _ratio = tv_image.get_width() / tv_image.get_height()
+            _tw = min(_avail_w, int(_avail_h * _ratio))
+            _th = int(_tw / _ratio)
+            _tx = (WINDOW_RES[0] - _tw) // 2
+            _ty = (WINDOW_RES[1] - _th) // 2
+            screen.blit(pygame.transform.scale(tv_image, (_tw, _th)), (_tx, _ty))
+        else:
+            _tw, _th = _avail_w, _avail_h
+            _tx, _ty = 100, 100
+            pygame.draw.rect(screen, (40, 40, 40), (_tx, _ty, _tw, _th))
             ts = high_res_big_font.render("TV is ON", True, (255, 255, 255))
             screen.blit(ts, ts.get_rect(center=(_tx + _tw // 2, _ty + _th // 2)))
-        else:
-            if tv_image:
-                screen.blit(pygame.transform.scale(tv_image, (WINDOW_RES[0] - 200, WINDOW_RES[1] - 200)), (100, 100))
-            else:
-                pygame.draw.rect(screen, (40, 40, 40), (100, 100, WINDOW_RES[0] - 200, WINDOW_RES[1] - 200))
-            ts = high_res_big_font.render("TV is ON", True, (255, 255, 255))
-            screen.blit(ts, ts.get_rect(center=(WINDOW_RES[0]//2, WINDOW_RES[1]//2)))
         inst = high_res_inst_font.render("SPACE or ESC to close", True, (200, 200, 200))
         screen.blit(inst, inst.get_rect(center=(WINDOW_RES[0]//2, WINDOW_RES[1]-130)))
 
@@ -2503,6 +2516,9 @@ while running:
     # Inventory bar (hidden when calendar is open)
     if ui_state != "calendar":
         draw_inventory_bar()
+
+    if debug_rects:
+        _draw_debug_rects(screen)
 
     # HUD notification: show cabinet_message above inventory when in game
     if ui_state == "game" and cabinet_message:
