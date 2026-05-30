@@ -201,9 +201,9 @@ _ROOM_RWX = 260  # right X of back wall
 _PLAYER_MIN_Y = 12   # top wall border for top-down view
 
 # Living room  (top-down view, 320×240 virtual)
-desk_rect           = pygame.Rect(83, 14, 152, 39)         # TV console 含植物+電視+月曆
-tv_rect             = pygame.Rect(109, 14, 72, 35)         # 電視螢幕區域
-cabinet_rect        = pygame.Rect(5, 14, 39, 43)           # 左側邊桌/抽屜（左上角）
+desk_rect           = pygame.Rect(95, 32, 128, 30)         # TV console 含植物+電視+月曆（右移+下移貼齊背景牆線）
+tv_rect             = pygame.Rect(145, 32, 58, 26)         # 電視螢幕區域（右移+下移）
+cabinet_rect        = pygame.Rect(5, 30, 32, 36)           # 左側邊桌/抽屜（下移）
 living_door_rect    = pygame.Rect(0, 67, 12, 84)           # 左牆門→臥室
 sofa_rect           = pygame.Rect(71, 180, 162, 44)        # 沙發（底部中央）
 
@@ -540,7 +540,7 @@ def draw_grid_calendar_ui(surface, date):
         surface.blit(overlay, (0, 0))
 
     cal_w, cal_h = 500, 510
-    cal_x = (WINDOW_RES[0] - cal_w) // 2 + 130
+    cal_x = (WINDOW_RES[0] - cal_w) // 2
     cal_y = (WINDOW_RES[1] - cal_h) // 2
     _cal_cx = cal_x + cal_w // 2
 
@@ -1118,7 +1118,7 @@ def _do_proximity_check():
             elif player_rect.colliderect(cabinet_proximity_rect):
                 prompt_label = "Cabinet"
                 prompt_label_rect = cabinet_rect
-            elif player_rect.colliderect(main_door_rect.inflate(32, 32)):
+            elif player_rect.colliderect(main_door_rect.inflate(16, 16)):
                 prompt_label = "Front Door"
                 prompt_label_rect = main_door_rect
     elif current_scene == "bedroom":
@@ -1135,13 +1135,13 @@ def _do_proximity_check():
         if player_rect.colliderect(bathroom_exit_prox):
             prompt_label = "Exit"
             prompt_label_rect = bathroom_exit_rect
-        elif player_rect.colliderect(sink_rect.inflate(32, 32)):
+        elif player_rect.colliderect(sink_rect.inflate(16, 16)):
             prompt_label = "Sink"
             prompt_label_rect = sink_rect
-        elif player_rect.colliderect(pipe_rect.inflate(20, 20)):
+        elif player_rect.colliderect(pipe_rect.inflate(12, 12)):
             prompt_label = "Pipe"
             prompt_label_rect = pipe_rect
-        elif player_rect.colliderect(toilet_rect.inflate(32, 32)):
+        elif player_rect.colliderect(toilet_rect.inflate(16, 16)):
             if calendar_date == DATE_1988 and iron_box_state == 0:
                 prompt_label = "Iron Box"
             elif calendar_date != DATE_1988 and iron_box_state == 3:
@@ -1176,22 +1176,22 @@ def _draw_label(surface):
 
 
 def draw_dialogue_ui(surface):
-    """Draw character bust upper-half (bottom-right) and speech bubble (close to bust)."""
+    """Draw character bust (upper body + thighs) at bottom-right and speech bubble."""
     _bust_src = player_img_1988_idle if calendar_date == DATE_1988 else player_img_2026_idle
     _bw = 0
     if _bust_src:
         _sw, _sh = _bust_src.get_size()
-        _half_h = _sh // 2
-        _crop = _bust_src.subsurface(pygame.Rect(0, 0, _sw, _half_h))
-        _display_h = _half_h * 3
-        _display_w = int(_sw * _display_h / _half_h)
+        _crop_h = int(_sh * 0.65)   # top 65% — includes upper body and thighs
+        _crop = _bust_src.subsurface(pygame.Rect(0, 0, _sw, _crop_h))
+        _display_h = _crop_h * 9   # 3x larger than previous (which was _half_h * 3)
+        _display_w = int(_sw * _display_h / _crop_h)
         _max_h = WINDOW_RES[1] - 60
         if _display_h > _max_h:
             _display_h = _max_h
-            _display_w = int(_sw * _display_h / _half_h)
+            _display_w = int(_sw * _display_h / _crop_h)
         if _display_w > WINDOW_RES[0] // 2:
             _display_w = WINDOW_RES[0] // 2
-            _display_h = int(_half_h * _display_w / _sw)
+            _display_h = int(_crop_h * _display_w / _sw)
         _bw = _display_w
         _bust = pygame.transform.scale(_crop, (_display_w, _display_h))
         _by = WINDOW_RES[1] - 98 - _display_h
@@ -1364,16 +1364,16 @@ while running:
 
     # Proximity rects
     calendar_proximity_rect = pygame.Rect(
-        desk_rect.centerx - 20, desk_rect.centery - 20, 40, 40).inflate(24, 32)
+        desk_rect.centerx - 12, desk_rect.centery - 12, 24, 24).inflate(12, 16)
     tv_proximity_rect = pygame.Rect(
-        tv_rect.centerx - 20, tv_rect.centery - 20, 40, 40).inflate(24, 32)
-    cabinet_proximity_rect = cabinet_rect.inflate(32, 32)
-    living_door_prox   = living_door_rect.inflate(32, 32)
-    bathroom_door_prox = bathroom_door_rect.inflate(32, 32)
-    bedroom_door_prox  = bedroom_door_rect.inflate(32, 32)
-    bookshelf_prox     = bookshelf_rect.inflate(32, 32)
-    computer_prox      = computer_desk_rect.inflate(32, 32)
-    bathroom_exit_prox = bathroom_exit_rect.inflate(32, 32)
+        tv_rect.centerx - 12, tv_rect.centery - 12, 24, 24).inflate(12, 16)
+    cabinet_proximity_rect = cabinet_rect.inflate(16, 16)
+    living_door_prox   = living_door_rect.inflate(20, 20)
+    bathroom_door_prox = bathroom_door_rect.inflate(20, 20)
+    bedroom_door_prox  = bedroom_door_rect.inflate(20, 20)
+    bookshelf_prox     = bookshelf_rect.inflate(16, 16)
+    computer_prox      = computer_desk_rect.inflate(16, 16)
+    bathroom_exit_prox = bathroom_exit_rect.inflate(20, 20)
 
     # Events
     for event in pygame.event.get():
@@ -1424,7 +1424,7 @@ while running:
                                 _obj = "tv"
                             elif player_rect.colliderect(cabinet_proximity_rect):
                                 _obj = "cabinet"
-                            elif player_rect.colliderect(main_door_rect.inflate(32, 32)):
+                            elif player_rect.colliderect(main_door_rect.inflate(16, 16)):
                                 _obj = "frontdoor"
                     elif current_scene == "bedroom":
                         if player_rect.colliderect(bedroom_door_prox):
@@ -1436,14 +1436,14 @@ while running:
                     elif current_scene == "bathroom":
                         if player_rect.colliderect(bathroom_exit_prox):
                             _obj = "exit"
-                        elif player_rect.colliderect(sink_rect.inflate(32, 32)):
+                        elif player_rect.colliderect(sink_rect.inflate(16, 16)):
                             _obj = "sink"
-                        elif player_rect.colliderect(pipe_rect.inflate(20, 20)):
+                        elif player_rect.colliderect(pipe_rect.inflate(12, 12)):
                             if calendar_date == DATE_1988 and iron_box_state == 1:
                                 _obj = "ironbox_place"
                             else:
                                 _obj = "pipe"
-                        elif player_rect.colliderect(toilet_rect.inflate(32, 32)):
+                        elif player_rect.colliderect(toilet_rect.inflate(16, 16)):
                             if calendar_date == DATE_1988 and iron_box_state == 0:
                                 _obj = "ironbox"
                             elif calendar_date != DATE_1988 and iron_box_state == 3:
@@ -2226,17 +2226,17 @@ while running:
             _bw = 120
             if _bust_src:
                 _sw, _sh = _bust_src.get_size()
-                _half_h = _sh // 2
-                _crop = _bust_src.subsurface(pygame.Rect(0, 0, _sw, _half_h))
-                _display_h = _half_h * 3
-                _display_w = int(_sw * _display_h / _half_h)
+                _crop_h = int(_sh * 0.65)   # top 65% — includes thighs
+                _crop = _bust_src.subsurface(pygame.Rect(0, 0, _sw, _crop_h))
+                _display_h = _crop_h * 9
+                _display_w = int(_sw * _display_h / _crop_h)
                 _max_h = WINDOW_RES[1] - 60
                 if _display_h > _max_h:
                     _display_h = _max_h
-                    _display_w = int(_sw * _display_h / _half_h)
+                    _display_w = int(_sw * _display_h / _crop_h)
                 if _display_w > WINDOW_RES[0] // 2:
                     _display_w = WINDOW_RES[0] // 2
-                    _display_h = int(_half_h * _display_w / _sw)
+                    _display_h = int(_crop_h * _display_w / _sw)
                 _bw = _display_w
                 _bust = pygame.transform.scale(_crop, (_display_w, _display_h))
                 _by = WINDOW_RES[1] - 98 - _display_h
