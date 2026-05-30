@@ -293,6 +293,8 @@ DIALOGUE_MAP = {
     "ironbox_place":("Should I put this under the pipe?",       True),
     "ironbox_rusty":("This box is rusty... Can I open it?",     True),
     "shelf":        ("Should I inspect the shelf?",             True),
+    "mirror":       ("Should I breathe on the mirror?",         True),
+    "bathtub":      ("Should I fill the bathtub?",              True),
 }
 
 # Puzzle & Interaction States
@@ -307,6 +309,13 @@ tetris_cart_rect  = pygame.Rect(desk_rect.centerx - 7, desk_rect.y + 4, 12, 8)  
 
 main_door_rect    = pygame.Rect(214, 0, 42, 19)      # 主大門（右上角門框）
 door_puzzle_state = [False, False, False, False]
+
+# Bathroom side-quest objects (2026 only)
+mirror_rect       = pygame.Rect(55, 12, 90, 35)    # 鏡子（後牆洗手台上方），待 F1 校正
+bathtub_rect      = pygame.Rect(230, 60, 75, 80)   # 浴缸（右側），待 F1 校正
+bathtub_state     = 0    # 0=空, 1=冷水, 2=熱水
+bathtub_selection = 0    # 0=熱水, 1=冷水
+mirror_breath_timer = 0  # >0 時顯示呼氣霧
 # Tetris constants & state
 # -------------------------------------------------------------------------
 TETRIS_W = 10
@@ -469,6 +478,12 @@ try:
     bg_1988_bathroom = pygame.transform.scale(_raw, VIRTUAL_RES_1080)
 except Exception as e:
     print(f"Could not load 1988_廁所_T.png: {e}")
+mirror_img = None
+try:
+    mirror_img = pygame.image.load(
+        get_resource_path(os.path.join("picture", "Mirror_去背.png"))).convert_alpha()
+except Exception as e:
+    print(f"Could not load Mirror_去背.png: {e}")
 try:
     _raw = pygame.image.load(get_resource_path(os.path.join("picture", "1988_房間_T.png"))).convert()
     bg_1988_bedroom = pygame.transform.scale(_raw, VIRTUAL_RES_1080)
@@ -1146,6 +1161,14 @@ def _do_proximity_check():
         elif player_rect.colliderect(pipe_rect.inflate(12, 12)):
             prompt_label = "Pipe"
             prompt_label_rect = pipe_rect
+        elif (calendar_date != DATE_1988 and
+              player_rect.colliderect(mirror_rect.inflate(16, 16))):
+            prompt_label = "Mirror"
+            prompt_label_rect = mirror_rect
+        elif (calendar_date != DATE_1988 and
+              player_rect.colliderect(bathtub_rect.inflate(16, 16))):
+            prompt_label = "Bathtub"
+            prompt_label_rect = bathtub_rect
         elif player_rect.colliderect(toilet_rect.inflate(16, 16)):
             if calendar_date == DATE_1988 and iron_box_state == 0:
                 prompt_label = "Iron Box"
@@ -1251,7 +1274,7 @@ def _trigger_action(obj):
     """Execute the game action after dialogue confirmation."""
     global ui_state, current_scene, player_x, player_y
     global room_lights_on, iron_box_state, tetris_cart_spawned, cabinet_message, _msg_timer
-    global dialogue_triggered, fighter_message
+    global dialogue_triggered, fighter_message, bathtub_state, mirror_breath_timer
     dialogue_triggered = True
     if obj == "tv":
         ui_state = "tv"
@@ -1322,6 +1345,12 @@ def _trigger_action(obj):
         ui_state = "iron_box"
         dialogue_triggered = False
     elif obj == "shelf":
+        dialogue_triggered = False
+    elif obj == "mirror":
+        mirror_breath_timer = 120   # 2 seconds of breath fog @ 60fps
+        dialogue_triggered = False
+    elif obj == "bathtub":
+        ui_state = "bathtub_fill"
         dialogue_triggered = False
 
 
@@ -1396,6 +1425,10 @@ while running:
         _msg_timer -= 1
     elif cabinet_message:
         cabinet_message = ""
+
+    # Mirror breath fog timer
+    if mirror_breath_timer > 0:
+        mirror_breath_timer -= 1
 
     # Proximity rects
     calendar_proximity_rect = pygame.Rect(
@@ -1478,6 +1511,12 @@ while running:
                             _obj = "exit"
                         elif player_rect.colliderect(sink_rect.inflate(16, 16)):
                             _obj = "sink"
+                        elif (calendar_date != DATE_1988 and
+                              player_rect.colliderect(mirror_rect.inflate(16, 16))):
+                            _obj = "mirror"
+                        elif (calendar_date != DATE_1988 and
+                              player_rect.colliderect(bathtub_rect.inflate(16, 16))):
+                            _obj = "bathtub"
                         elif player_rect.colliderect(pipe_rect.inflate(12, 12)):
                             if calendar_date == DATE_1988 and iron_box_state == 1:
                                 _obj = "ironbox_place"
@@ -1721,6 +1760,22 @@ while running:
                         cabinet_message = "Broke open the rusty iron box! Found a strange cube!"; _msg_timer = 180
                         ui_state = "game"
 
+            elif ui_state == "bathtub_fill":
+                if event.key == pygame.K_ESCAPE:
+                    ui_state = "game"
+                elif event.key in (pygame.K_LEFT, pygame.K_UP):
+                    bathtub_selection = 0   # Hot water
+                elif event.key in (pygame.K_RIGHT, pygame.K_DOWN):
+                    bathtub_selection = 1   # Cold water
+                elif event.key == pygame.K_SPACE:
+                    bathtub_state = 2 if bathtub_selection == 0 else 1
+                    cabinet_message = ("Bathtub filled with hot water!"
+                                       if bathtub_state == 2
+                                       else "Bathtub filled with cold water!")
+                    _msg_timer = 180
+                    ui_state = "game"
+                    pygame.event.clear(pygame.KEYDOWN)
+
     # Player movement
     keys = pygame.key.get_pressed()
     old_x, old_y = player_x, player_y
@@ -1872,9 +1927,10 @@ while running:
            player_rect.colliderect(bedroom_door_rect):
             collision = True
     elif current_scene == "bathroom":
-        if player_rect.colliderect(toilet_rect) or \
-           player_rect.colliderect(sink_rect) or \
-           player_rect.colliderect(bathroom_exit_rect):
+        if (player_rect.colliderect(toilet_rect) or
+                player_rect.colliderect(sink_rect) or
+                player_rect.colliderect(bathroom_exit_rect) or
+                player_rect.colliderect(bathtub_rect)):
             collision = True
 
     if collision:
@@ -2136,6 +2192,25 @@ while running:
                     _dh = max(2, _dw * 2 + 1)
                     pygame.draw.ellipse(display_surface, (130, 195, 235),
                                         (_drop_cx - _dw, _dy - _dh, _dw * 2, _dh * 2))
+            # Mirror fog overlay (2026 only)
+            if calendar_date != DATE_1988 and mirror_img:
+                _SX_m = WINDOW_RES[0] / VIRTUAL_RES[0]
+                _SY_m = (WINDOW_RES[1] - 60) / VIRTUAL_RES[1]
+                _mx = int(mirror_rect.x * _SX_m)
+                _my = int(mirror_rect.y * _SY_m)
+                _mw = int(mirror_rect.w * _SX_m)
+                _mh = int(mirror_rect.h * _SY_m)
+                _m_scaled = pygame.transform.scale(mirror_img, (_mw, _mh))
+                if bathtub_state == 2:           # hot water — full permanent fog
+                    _fog = pygame.Surface((_mw, _mh), pygame.SRCALPHA)
+                    _fog.fill((255, 255, 255, 210))
+                    screen.blit(_m_scaled, (_mx, _my))
+                    screen.blit(_fog, (_mx, _my))
+                elif mirror_breath_timer > 0:    # breath — short fog
+                    _fog = pygame.Surface((_mw, _mh), pygame.SRCALPHA)
+                    _fog.fill((255, 255, 255, 155))
+                    screen.blit(_m_scaled, (_mx, _my))
+                    screen.blit(_fog, (_mx, _my))
         else:
             # White tile floor
             display_surface.fill((215, 220, 230))
@@ -2280,6 +2355,24 @@ while running:
             screen.blit(ts, ts.get_rect(center=(_tx + _tw // 2, _ty + _th // 2)))
         inst = high_res_inst_font.render("SPACE or ESC to close", True, (200, 200, 200))
         screen.blit(inst, inst.get_rect(center=(WINDOW_RES[0]//2, WINDOW_RES[1]-130)))
+
+    elif ui_state == "bathtub_fill":
+        overlay = pygame.Surface(WINDOW_RES, pygame.SRCALPHA)
+        overlay.fill((0, 0, 30, 210))
+        screen.blit(overlay, (0, 0))
+        _title = cal_day_font.render("Fill the bathtub with:", True, (200, 230, 255))
+        screen.blit(_title, _title.get_rect(center=(WINDOW_RES[0]//2, WINDOW_RES[1]//2 - 70)))
+        for _i, (_lbl, _col) in enumerate([("Hot Water", (255, 120, 60)),
+                                            ("Cold Water", (100, 180, 255))]):
+            _sel = (bathtub_selection == _i)
+            _prefix = "▶ " if _sel else "  "
+            _tc = _col if _sel else (90, 90, 90)
+            _opt = cal_day_font.render(_prefix + _lbl, True, _tc)
+            screen.blit(_opt, _opt.get_rect(center=(WINDOW_RES[0]//2,
+                                                     WINDOW_RES[1]//2 - 10 + _i * 56)))
+        _hint = cal_inst_font.render(
+            "Left/Right: Choose   SPACE: Confirm   ESC: Cancel", True, (110, 110, 110))
+        screen.blit(_hint, _hint.get_rect(center=(WINDOW_RES[0]//2, WINDOW_RES[1]//2 + 110)))
 
     elif ui_state == "cabinet":
         overlay = pygame.Surface(WINDOW_RES, pygame.SRCALPHA)
