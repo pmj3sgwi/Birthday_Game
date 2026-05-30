@@ -483,7 +483,19 @@ try:
     mirror_img = pygame.image.load(
         get_resource_path(os.path.join("picture", "Mirror_去背.png"))).convert_alpha()
 except Exception as e:
-    print(f"Could not load Mirror_去背.png: {e}")
+    print(f"Could not load 鏡子_去背.png: {e}")
+cab_img_closed = cab_img_l1 = cab_img_l2 = None
+for _cab_name, _cab_key in [("客廳櫃_去背.png", "closed"),
+                              ("客廳櫃_L1_去背.png", "l1"),
+                              ("客廳櫃_L2_去背.png", "l2")]:
+    try:
+        _cimg = pygame.image.load(
+            get_resource_path(os.path.join("picture", _cab_name))).convert_alpha()
+        if _cab_key == "closed": cab_img_closed = _cimg
+        elif _cab_key == "l1":   cab_img_l1 = _cimg
+        else:                    cab_img_l2 = _cimg
+    except Exception as e:
+        print(f"Could not load {_cab_name}: {e}")
 try:
     _raw = pygame.image.load(get_resource_path(os.path.join("picture", "1988_房間_T.png"))).convert()
     bg_1988_bedroom = pygame.transform.scale(_raw, VIRTUAL_RES_1080)
@@ -1155,12 +1167,6 @@ def _do_proximity_check():
         if player_rect.colliderect(bathroom_exit_prox):
             prompt_label = "Exit"
             prompt_label_rect = bathroom_exit_rect
-        elif player_rect.colliderect(sink_rect.inflate(16, 16)):
-            prompt_label = "Sink"
-            prompt_label_rect = sink_rect
-        elif player_rect.colliderect(pipe_rect.inflate(12, 12)):
-            prompt_label = "Pipe"
-            prompt_label_rect = pipe_rect
         elif (calendar_date != DATE_1988 and
               player_rect.colliderect(mirror_rect.inflate(16, 16))):
             prompt_label = "Mirror"
@@ -1169,6 +1175,12 @@ def _do_proximity_check():
               player_rect.colliderect(bathtub_rect.inflate(16, 16))):
             prompt_label = "Bathtub"
             prompt_label_rect = bathtub_rect
+        elif player_rect.colliderect(sink_rect.inflate(16, 16)):
+            prompt_label = "Sink"
+            prompt_label_rect = sink_rect
+        elif player_rect.colliderect(pipe_rect.inflate(12, 12)):
+            prompt_label = "Pipe"
+            prompt_label_rect = pipe_rect
         elif player_rect.colliderect(toilet_rect.inflate(16, 16)):
             if calendar_date == DATE_1988 and iron_box_state == 0:
                 prompt_label = "Iron Box"
@@ -1201,6 +1213,15 @@ def _draw_label(surface):
     bg.fill((0, 0, 0, 160))
     surface.blit(bg, bg.get_rect(midbottom=(lx, ly)))
     surface.blit(txt, txt.get_rect(midbottom=(lx, ly - 2)))
+
+
+def _cab_current_img():
+    """Return the cabinet PNG matching current drawer state."""
+    if cabinet_drawer2_open:
+        return cab_img_l2 or cab_img_l1 or cab_img_closed
+    elif cabinet_drawer1_open:
+        return cab_img_l1 or cab_img_closed
+    return cab_img_closed
 
 
 def _draw_debug_rects(surface):
@@ -1509,14 +1530,14 @@ while running:
                     elif current_scene == "bathroom":
                         if player_rect.colliderect(bathroom_exit_prox):
                             _obj = "exit"
-                        elif player_rect.colliderect(sink_rect.inflate(16, 16)):
-                            _obj = "sink"
                         elif (calendar_date != DATE_1988 and
                               player_rect.colliderect(mirror_rect.inflate(16, 16))):
                             _obj = "mirror"
                         elif (calendar_date != DATE_1988 and
                               player_rect.colliderect(bathtub_rect.inflate(16, 16))):
                             _obj = "bathtub"
+                        elif player_rect.colliderect(sink_rect.inflate(16, 16)):
+                            _obj = "sink"
                         elif player_rect.colliderect(pipe_rect.inflate(12, 12)):
                             if calendar_date == DATE_1988 and iron_box_state == 1:
                                 _obj = "ironbox_place"
@@ -1608,12 +1629,9 @@ while running:
                                 cabinet_message = "Drawer is empty."; _msg_timer = 180
                     elif cabinet_selection == 1:
                         if not cabinet_drawer2_open:
-                            if has_key:
-                                cabinet_drawer2_open = True
-                                cabinet_item_pending = "Remote"
-                                cabinet_message = "Unlocked! Remote is here! SPACE to take it."; _msg_timer = 180
-                            else:
-                                cabinet_message = "Locked! Need a key."; _msg_timer = 180
+                            cabinet_drawer2_open = True
+                            cabinet_item_pending = "Remote"
+                            cabinet_message = "There's a remote inside! SPACE to take it."; _msg_timer = 180
                         else:
                             if "Remote" not in inventory and cabinet_drawer2_open:
                                 cabinet_item_pending = "Remote"
@@ -2088,6 +2106,17 @@ while running:
             # 背景圖含所有家具；只畫動態 overlay
             if tetris_cart_spawned:
                 draw_cartridge_icon(display_surface, tetris_cart_rect, (50, 200, 80))
+            # Cabinet state overlay (show correct drawer image)
+            _ci = _cab_current_img()
+            if _ci and calendar_date != DATE_1988:
+                _SX_c2 = WINDOW_RES[0] / VIRTUAL_RES[0]
+                _SY_c2 = (WINDOW_RES[1] - 60) / VIRTUAL_RES[1]
+                _cab_bx = int(cabinet_rect.x * _SX_c2)
+                _cab_by2 = int(cabinet_rect.bottom * _SY_c2)
+                _cab_h2 = int(cabinet_rect.h * _SY_c2 * 3.5)
+                _cab_w2 = int(_ci.get_width() * _cab_h2 / _ci.get_height())
+                screen.blit(pygame.transform.scale(_ci, (_cab_w2, _cab_h2)),
+                            (_cab_bx, _cab_by2 - _cab_h2))
         else:
             # 1988 或無圖 fallback：全部程式碼繪製
             draw_desk_and_calendar(display_surface)
@@ -2387,14 +2416,17 @@ while running:
         _dx = (WINDOW_RES[0] - _dw) // 2
         _dy = (WINDOW_RES[1] - _dh) // 2 - 20
         if _bg_src:
-            _cx = int(cabinet_rect.centerx * _SX_c)
-            _cy = int((cabinet_rect.centery + 40) * _SY_c)
-            _cw, _ch = 220, 320
-            _cr = pygame.Rect(_cx - _cw // 2, _cy - _ch // 3, _cw, _ch)
-            _cr = _cr.clip(pygame.Rect(0, 0, *_HIRES))
-            _cab_crop = _bg_src.subsurface(_cr)
-            _cab_zoom = pygame.transform.scale(_cab_crop, (_dw, _dh))
-            screen.blit(_cab_zoom, (_dx, _dy))
+            _ci_popup = _cab_current_img()
+            if _ci_popup:
+                screen.blit(pygame.transform.scale(_ci_popup, (_dw, _dh)), (_dx, _dy))
+            else:
+                _cx = int(cabinet_rect.centerx * _SX_c)
+                _cy = int((cabinet_rect.centery + 40) * _SY_c)
+                _cw, _ch = 220, 320
+                _cr = pygame.Rect(_cx - _cw // 2, _cy - _ch // 3, _cw, _ch)
+                _cr = _cr.clip(pygame.Rect(0, 0, *_HIRES))
+                _cab_crop = _bg_src.subsurface(_cr)
+                screen.blit(pygame.transform.scale(_cab_crop, (_dw, _dh)), (_dx, _dy))
         else:
             pygame.draw.rect(screen, (120, 80, 40), pygame.Rect(_dx, _dy, _dw, _dh), border_radius=10)
             pygame.draw.rect(screen, (80, 50, 20), pygame.Rect(_dx, _dy, _dw, _dh), 4, border_radius=10)
@@ -2409,8 +2441,9 @@ while running:
 
         if cabinet_drawer1_open and not has_flashlight:
             draw_flashlight_icon(screen, _d1_rect.centerx, _d1_rect.centery, 80)
-        if cabinet_drawer2_open and not has_key:
-            draw_key_icon(screen, _d2_rect.centerx, _d2_rect.centery, 80)
+        if cabinet_drawer2_open and "Remote" not in inventory:
+            pygame.draw.rect(screen, (60, 60, 180), _d2_rect.inflate(-40, -50))
+            pygame.draw.rect(screen, (100, 100, 220), _d2_rect.inflate(-40, -50), 3)
 
         if cabinet_message:
             msg = high_res_inst_font.render(cabinet_message, True, (255, 100, 100))
