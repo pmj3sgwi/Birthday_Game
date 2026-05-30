@@ -1362,6 +1362,10 @@ while running:
             room_lights_on = False
         prev_calendar_date = calendar_date
 
+    # Safety: dialogue_active must not persist when not in game state
+    if dialogue_active and ui_state != "game":
+        dialogue_active = False
+
     # Proximity rects
     calendar_proximity_rect = pygame.Rect(
         desk_rect.centerx - 12, desk_rect.centery - 12, 24, 24).inflate(12, 16)
@@ -1394,6 +1398,8 @@ while running:
                         _obj = dialogue_object
                         dialogue_active = False
                         _trigger_action(_obj)
+                        # Flush queued key events to prevent rapid re-trigger
+                        pygame.event.clear(pygame.KEYDOWN)
                 elif event.key == pygame.K_ESCAPE:
                     dialogue_active = False
                 continue
