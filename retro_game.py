@@ -206,17 +206,17 @@ _PLAYER_MIN_Y = 12   # top wall border for top-down view
 # Per-room player movement bounds (virtual 320×240, player_size=20)
 # (min_x, max_x, min_y, max_y)  — edit values in COLLISIONS.md then apply here
 ROOM_BOUNDS = {
-    "living_room": (12, 288, 12, 208),
+    "living_room": (15, 280, 13, 205),   # updated per COLLISIONS.md
     "bedroom":     (12, 288, 12, 208),
     "bathroom":    (12, 288, 12, 208),
 }
 
 # Living room  (top-down view, 320×240 virtual)
-desk_rect           = pygame.Rect(95, 32, 128, 30)         # TV console 含植物+電視+月曆（右移+下移貼齊背景牆線）
-tv_rect             = pygame.Rect(145, 32, 58, 26)         # 電視螢幕區域（右移+下移）
-cabinet_rect        = pygame.Rect(5, 30, 32, 36)           # 左側邊桌/抽屜（下移）
+desk_rect           = pygame.Rect(95, 33, 128, 30)         # TV console 含植物+電視+月曆
+tv_rect             = pygame.Rect(143, 33, 58, 26)         # 電視螢幕區域
+cabinet_rect        = pygame.Rect(15, 31, 32, 36)          # 左側邊桌/抽屜（貼齊新左牆 x=15）
 living_door_rect    = pygame.Rect(0, 67, 12, 84)           # 左牆門→臥室
-sofa_rect           = pygame.Rect(71, 180, 162, 44)        # 沙發（底部中央）
+sofa_rect           = pygame.Rect(72, 178, 162, 44)        # 沙發（底部中央）
 
 # Bedroom (top-down view)
 bedroom_door_rect   = pygame.Rect(302, 142, 18, 65)  # right wall door（下方，y=142-207）
@@ -315,7 +315,7 @@ cup_state         = 0  # 0: intact, 1: crushed
 tetris_cart_spawned = False
 tetris_cart_rect  = pygame.Rect(desk_rect.centerx - 7, desk_rect.y + 4, 12, 8)  # On the desk
 
-main_door_rect    = pygame.Rect(214, 0, 42, 19)      # 主大門（右上角門框）
+main_door_rect    = pygame.Rect(209, 0, 42, 19)      # 主大門（右上角門框）
 door_puzzle_state = [False, False, False, False]
 
 # Bathroom side-quest objects (2026 only)
