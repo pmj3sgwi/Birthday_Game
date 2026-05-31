@@ -206,17 +206,17 @@ _PLAYER_MIN_Y = 12   # top wall border for top-down view
 # Per-room player movement bounds (virtual 320×240, player_size=20)
 # (min_x, max_x, min_y, max_y)  — edit values in COLLISIONS.md then apply here
 ROOM_BOUNDS = {
-    "living_room": (15, 280, 13, 205),   # updated per COLLISIONS.md
+    "living_room": (20, 250, 13, 180),   # updated per COLLISIONS.md
     "bedroom":     (12, 288, 12, 208),
     "bathroom":    (12, 288, 12, 208),
 }
 
 # Living room  (top-down view, 320×240 virtual)
-desk_rect           = pygame.Rect(95, 33, 128, 30)         # TV console 含植物+電視+月曆
-tv_rect             = pygame.Rect(143, 33, 58, 26)         # 電視螢幕區域
-cabinet_rect        = pygame.Rect(15, 31, 32, 36)          # 左側邊桌/抽屜（貼齊新左牆 x=15）
-living_door_rect    = pygame.Rect(0, 67, 12, 84)           # 左牆門→臥室
-sofa_rect           = pygame.Rect(72, 178, 162, 44)        # 沙發（底部中央）
+desk_rect           = pygame.Rect(89, 30, 128, 30)         # TV console 含植物+電視+月曆
+tv_rect             = pygame.Rect(131, 30, 58, 26)         # 電視螢幕區域
+cabinet_rect        = pygame.Rect(20, 29, 32, 36)          # 左側邊桌/抽屜（貼齊新左牆 x=20）
+living_door_rect    = pygame.Rect(0, 60, 12, 84)           # 左牆門→臥室（y 比例順移）
+sofa_rect           = pygame.Rect(69, 157, 162, 44)        # 沙發（底部中央）
 
 # Bedroom (top-down view)
 bedroom_door_rect   = pygame.Rect(302, 142, 18, 65)  # right wall door（下方，y=142-207）
@@ -228,7 +228,7 @@ bathroom_exit_rect  = pygame.Rect(0, 77, 17, 83)     # 左牆出口門（y=77-16
 toilet_rect         = pygame.Rect(146, 40, 56, 55)   # 馬桶（中央）
 sink_rect           = pygame.Rect(76, 37, 63, 55)    # 洗手台+木櫃（中左）
 pipe_rect           = pygame.Rect(87, 3, 94, 37)     # 頂牆水管（正上方，y=3-40）
-bathroom_door_rect  = pygame.Rect(308, 67, 12, 84)   # living room 右牆通廁所門
+bathroom_door_rect  = pygame.Rect(240, 60, 12, 84)   # living room 右牆通廁所門（貼齊新右牆 max_x=250）
 
 # Light switch on back wall, right of TV (320×240 space)
 _SW_NX, _SW_NY, _SW_NW, _SW_NH = 258, 18, 11, 12
@@ -315,7 +315,7 @@ cup_state         = 0  # 0: intact, 1: crushed
 tetris_cart_spawned = False
 tetris_cart_rect  = pygame.Rect(desk_rect.centerx - 7, desk_rect.y + 4, 12, 8)  # On the desk
 
-main_door_rect    = pygame.Rect(209, 0, 42, 19)      # 主大門（右上角門框）
+main_door_rect    = pygame.Rect(188, 0, 42, 19)      # 主大門（右上角門框）
 door_puzzle_state = [False, False, False, False]
 
 # Bathroom side-quest objects (2026 only)
