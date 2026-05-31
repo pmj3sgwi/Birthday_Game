@@ -203,6 +203,14 @@ _ROOM_LWX = 60   # left X of back wall
 _ROOM_RWX = 260  # right X of back wall
 _PLAYER_MIN_Y = 12   # top wall border for top-down view
 
+# Per-room player movement bounds (virtual 320×240, player_size=20)
+# (min_x, max_x, min_y, max_y)  — edit values in COLLISIONS.md then apply here
+ROOM_BOUNDS = {
+    "living_room": (12, 288, 12, 208),
+    "bedroom":     (12, 288, 12, 208),
+    "bathroom":    (12, 288, 12, 208),
+}
+
 # Living room  (top-down view, 320×240 virtual)
 desk_rect           = pygame.Rect(95, 32, 128, 30)         # TV console 含植物+電視+月曆（右移+下移貼齊背景牆線）
 tv_rect             = pygame.Rect(145, 32, 58, 26)         # 電視螢幕區域（右移+下移）
@@ -1945,9 +1953,11 @@ while running:
                         tetris_game_over = True
             tetris_fall_time = now
 
-    # Clamp to room interior (12px wall border on all sides)
-    player_x = max(12, min(player_x, VIRTUAL_RES[0] - 12 - player_size))
-    player_y = max(_PLAYER_MIN_Y, min(player_y, VIRTUAL_RES[1] - 12 - player_size))
+    # Per-room wall boundary clamp
+    _bx_min, _bx_max, _by_min, _by_max = ROOM_BOUNDS.get(
+        current_scene, (12, 288, 12, 208))
+    player_x = max(_bx_min, min(player_x, _bx_max))
+    player_y = max(_by_min, min(player_y, _by_max))
 
     # Collision
     player_rect = pygame.Rect(player_x, player_y, player_size, player_size)
