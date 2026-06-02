@@ -15,7 +15,7 @@
 
 | 房間 | min_x | max_x | min_y | max_y | 說明 |
 |------|------:|------:|------:|------:|------|
-| `living_room` | 20 | 250 | 13 | 180 | 待校正 |
+| `living_room` | 15 | 280 | 30 | 200 | x 還原，y 保留 |
 | `bedroom`     | 12 | 288 | 12 | 208 | 待校正 |
 | `bathroom`    | 12 | 288 | 12 | 208 | 待校正 |
 
@@ -53,13 +53,13 @@
 
 | 變數 | 目前值 `(x, y, w, h)` | x 範圍 | y 範圍 | 說明 |
 |------|----------------------|--------|--------|------|
-| `desk_rect` | `(83, 28, 132, 55)` | 83–215 | 28–83 | 電視桌（月曆觸發使用此 centerx） |
-| `tv_rect` | `(110, 28, 55, 50)` | 110–165 | 28–78 | 電視螢幕 |
+| `desk_rect` | `(83, 28, 132, 30)` | 83–215 | 28–58 | 電視桌（月曆觸發使用此 centerx；h≤38 才可觸發） |
+| `tv_rect` | `(110, 28, 55, 28)` | 110–165 | 28–56 | 電視螢幕 |
 | `cabinet_rect` | `(20, 35, 28, 50)` | 20–48 | 35–85 | 左側抽屜桌 |
-| `living_door_rect` | `(0, 65, 10, 80)` | 0–10 | 65–145 | 左牆門 → 臥室（x=0 固定） |
-| `bathroom_door_rect` | `(240, 65, 10, 80)` | 240–250 | 65–145 | 右牆門 → 廁所 |
+| `living_door_rect` | `(15, 80, 10, 80)` | 15–25 | 80–160 | 左牆門 → 臥室 |
+| `bathroom_door_rect` | `(288, 80, 10, 80)` | 288–298 | 80–160 | 右牆門 → 廁所 |
 | `main_door_rect` | `(140, 0, 52, 18)` | 140–192 | 0–18 | 上牆大門（y=0 固定） |
-| `sofa_rect` | `(75, 172, 100, 12)` | 75–175 | 172–184 | 沙發（y≥171 不擋玩家）|
+| `sofa_rect` | `(100, 210, 100, 50)` | 100–200 | 210–260 | 沙發 |
 
 ### 電燈開關（1988 場景專用）
 
@@ -71,10 +71,12 @@
 
 ### 感應範圍（Proximity Rect）
 
+> `cx` = `rect.centerx`，`cy` = `rect.centery`（pygame Rect 中心座標屬性）
+
 | 物件 | 計算方式 | 感應核心 | inflate |
 |------|---------|---------|---------|
-| 月曆（desk） | `Rect(cx-12, cy-12, 24, 24).inflate(12, 16)` | 24×24 | +12, +16 |
-| 電視（tv） | `Rect(cx-12, cy-12, 24, 24).inflate(12, 16)` | 24×24 | +12, +16 |
+| 月曆（desk） | `Rect(desk_rect.centerx-12, desk_rect.centery-12, 24, 24).inflate(12, 16)` | 24×24 | +12, +16 |
+| 電視（tv） | `Rect(tv_rect.centerx-12, tv_rect.centery-12, 24, 24).inflate(12, 16)` | 24×24 | +12, +16 |
 | cabinet | `cabinet_rect.inflate(16, 16)` | — | +16, +16 |
 | living_door | `living_door_rect.inflate(20, 20)` | — | +20, +20 |
 | bathroom_door | `bathroom_door_rect.inflate(20, 20)` | — | +20, +20 |
@@ -120,9 +122,11 @@
 | 物件 | inflate |
 |------|---------|
 | bathroom_exit | `inflate(20, 20)` |
-| sink | `inline inflate(16, 16)` |
-| pipe | `inline inflate(12, 12)` |
-| toilet | `inline inflate(16, 16)` |
+| mirror | `inflate(24, 80)` |
+| bathtub | `inflate(16, 16)` |
+| sink | `inflate(16, 16)` |
+| pipe | `inflate(12, 12)` |
+| toilet | `inflate(16, 16)` |
 
 ---
 

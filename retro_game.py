@@ -206,17 +206,17 @@ _PLAYER_MIN_Y = 12   # top wall border for top-down view
 # Per-room player movement bounds (virtual 320×240, player_size=20)
 # (min_x, max_x, min_y, max_y)  — edit values in COLLISIONS.md then apply here
 ROOM_BOUNDS = {
-    "living_room": (20, 250, 13, 180),   # updated per COLLISIONS.md
+    "living_room": (15, 280, 30, 200),
     "bedroom":     (12, 288, 12, 208),
     "bathroom":    (12, 288, 12, 208),
 }
 
 # Living room  (top-down view, 320×240 virtual)
-desk_rect           = pygame.Rect(83, 28, 132, 55)         # TV console 含植物+電視+月曆
-tv_rect             = pygame.Rect(110, 28, 55, 50)         # 電視螢幕區域
+desk_rect           = pygame.Rect(83, 28, 132, 30)         # TV console 含植物+電視+月曆（h≤38 使月曆感應可觸發）
+tv_rect             = pygame.Rect(110, 28, 55, 28)         # 電視螢幕區域
 cabinet_rect        = pygame.Rect(20, 35, 28, 50)          # 左側邊桌/抽屜
-living_door_rect    = pygame.Rect(0, 65, 10, 80)           # 左牆門→臥室
-sofa_rect           = pygame.Rect(75, 172, 100, 12)        # 沙發（y≥171，不擋玩家初始位置）
+living_door_rect    = pygame.Rect(15, 80, 10, 80)          # 左牆門→臥室
+sofa_rect           = pygame.Rect(100, 210, 100, 50)       # 沙發
 
 # Bedroom (top-down view)
 bedroom_door_rect   = pygame.Rect(302, 142, 18, 65)  # right wall door（下方，y=142-207）
@@ -228,7 +228,7 @@ bathroom_exit_rect  = pygame.Rect(0, 77, 17, 83)     # 左牆出口門（y=77-16
 toilet_rect         = pygame.Rect(146, 40, 56, 55)   # 馬桶（中央）
 sink_rect           = pygame.Rect(76, 37, 63, 55)    # 洗手台+木櫃（中左）
 pipe_rect           = pygame.Rect(87, 3, 94, 37)     # 頂牆水管（正上方，y=3-40）
-bathroom_door_rect  = pygame.Rect(240, 65, 10, 80)   # living room 右牆通廁所門
+bathroom_door_rect  = pygame.Rect(288, 80, 10, 80)   # living room 右牆通廁所門
 
 # Light switch on back wall, right of TV (320×240 space)
 _SW_NX, _SW_NY, _SW_NW, _SW_NH = 258, 18, 11, 12
@@ -319,7 +319,7 @@ main_door_rect    = pygame.Rect(140, 0, 52, 18)      # 主大門
 door_puzzle_state = [False, False, False, False]
 
 # Bathroom side-quest objects (2026 only)
-mirror_rect       = pygame.Rect(50, 8, 65, 25)     # 鏡子（Sink 左側後牆）
+mirror_rect       = pygame.Rect(55, 12, 90, 35)    # 鏡子（Sink 左側後牆）
 bathtub_rect      = pygame.Rect(230, 60, 75, 80)   # 浴缸（右側），待 F1 校正
 bathtub_state     = 0    # 0=空, 1=冷水, 2=熱水
 bathtub_selection = 0    # 0=熱水, 1=冷水
