@@ -206,17 +206,18 @@ _PLAYER_MIN_Y = 12   # top wall border for top-down view
 # Per-room player movement bounds (virtual 320×240, player_size=20)
 # (min_x, max_x, min_y, max_y)  — edit values in COLLISIONS.md then apply here
 ROOM_BOUNDS = {
-    "living_room": (15, 280, 30, 200),
+    "living_room": (45, 280, 55, 200),
     "bedroom":     (12, 288, 12, 208),
     "bathroom":    (12, 288, 12, 208),
 }
 
 # Living room  (top-down view, 320×240 virtual)
-desk_rect           = pygame.Rect(83, 28, 132, 30)         # TV console 含植物+電視+月曆（h≤38 使月曆感應可觸發）
-tv_rect             = pygame.Rect(110, 28, 55, 28)         # 電視螢幕區域
-cabinet_rect        = pygame.Rect(20, 35, 28, 50)          # 左側邊桌/抽屜
-living_door_rect    = pygame.Rect(15, 80, 10, 80)          # 左牆門→臥室
-sofa_rect           = pygame.Rect(100, 210, 100, 50)       # 沙發
+desk_rect           = pygame.Rect(120, 32, 90, 50)         # TV console 含植物+電視+月曆
+calendar_rect       = pygame.Rect(190, 50, 14, 12)                           # 月曆圖示
+tv_rect             = pygame.Rect(145, 32, 40, 35)         # 電視螢幕區域
+cabinet_rect        = pygame.Rect(25, 35, 40, 50)          # 左側邊桌/抽屜
+living_door_rect    = pygame.Rect(15, 100, 10, 80)         # 左牆門→臥室
+sofa_rect           = pygame.Rect(110, 190, 100, 50)       # 沙發
 
 # Bedroom (top-down view)
 bedroom_door_rect   = pygame.Rect(302, 142, 18, 65)  # right wall door（下方，y=142-207）
@@ -228,10 +229,10 @@ bathroom_exit_rect  = pygame.Rect(0, 77, 17, 83)     # 左牆出口門（y=77-16
 toilet_rect         = pygame.Rect(146, 40, 56, 55)   # 馬桶（中央）
 sink_rect           = pygame.Rect(76, 37, 63, 55)    # 洗手台+木櫃（中左）
 pipe_rect           = pygame.Rect(87, 3, 94, 37)     # 頂牆水管（正上方，y=3-40）
-bathroom_door_rect  = pygame.Rect(288, 80, 10, 80)   # living room 右牆通廁所門
+bathroom_door_rect  = pygame.Rect(300, 100, 10, 80)  # living room 右牆通廁所門
 
 # Light switch on back wall, right of TV (320×240 space)
-_SW_NX, _SW_NY, _SW_NW, _SW_NH = 258, 18, 11, 12
+_SW_NX, _SW_NY, _SW_NW, _SW_NH = 258, 30, 11, 12
 
 # Fonts & UI state
 # -------------------------------------------------------------------------
@@ -258,6 +259,7 @@ has_key           = False
 cabinet_message   = ""
 _msg_timer        = 0    # frames until cabinet_message auto-clears
 debug_rects       = False  # F1 to toggle collision rect overlay
+debug_prox        = False  # F2 to toggle proximity rect overlay
 inventory         = []
 
 DATE_1988         = datetime.date(1988, 6, 22)
@@ -315,7 +317,7 @@ cup_state         = 0  # 0: intact, 1: crushed
 tetris_cart_spawned = False
 tetris_cart_rect  = pygame.Rect(desk_rect.centerx - 7, desk_rect.y + 4, 12, 8)  # On the desk
 
-main_door_rect    = pygame.Rect(140, 0, 52, 18)      # 主大門
+main_door_rect    = pygame.Rect(225, 28, 52, 10)     # 主大門
 door_puzzle_state = [False, False, False, False]
 
 # Bathroom side-quest objects (2026 only)
@@ -1170,7 +1172,7 @@ def _do_proximity_check():
             elif player_rect.colliderect(cabinet_proximity_rect):
                 prompt_label = "Cabinet"
                 prompt_label_rect = cabinet_rect
-            elif player_rect.colliderect(main_door_rect.inflate(16, 16)):
+            elif player_rect.colliderect(main_door_rect.inflate(5, 50)):
                 prompt_label = "Front Door"
                 prompt_label_rect = main_door_rect
     elif current_scene == "bedroom":
@@ -1245,23 +1247,71 @@ def _cab_current_img():
 
 
 def _draw_debug_rects(surface):
-    """Overlay collision rects in red for visual calibration (toggle with F1)."""
+    """Overlay collision rects in red and room bounds in blue (F1)."""
     _SX = WINDOW_RES[0] / VIRTUAL_RES[0]
     _SY = (WINDOW_RES[1] - 60) / VIRTUAL_RES[1]
+    _font = pygame.font.SysFont("consolas", 14)
     if current_scene == "living_room":
-        rects = [desk_rect, tv_rect, cabinet_rect, living_door_rect,
-                 bathroom_door_rect, main_door_rect, sofa_rect]
+        rects = [desk_rect, calendar_rect, tv_rect, cabinet_rect,
+                 living_door_rect, bathroom_door_rect, main_door_rect, sofa_rect]
     elif current_scene == "bedroom":
         rects = [bedroom_door_rect, bookshelf_rect, computer_desk_rect]
     else:  # bathroom
         rects = [bathroom_exit_rect, pipe_rect, sink_rect, toilet_rect]
+        if calendar_date != DATE_1988:
+            rects += [mirror_rect, bathtub_rect]
     for r in rects:
-        pygame.draw.rect(surface, (255, 0, 0),
-                         (int(r.x * _SX), int(r.y * _SY),
-                          int(r.w * _SX), int(r.h * _SY)), 2)
-        lbl = pygame.font.SysFont("consolas", 14).render(
-            f"({r.x},{r.y},{r.w},{r.h})", True, (255, 200, 0))
-        surface.blit(lbl, (int(r.x * _SX), int(r.y * _SY) - 16))
+        sr = (int(r.x * _SX), int(r.y * _SY), int(r.w * _SX), int(r.h * _SY))
+        pygame.draw.rect(surface, (255, 0, 0), sr, 2)
+        surface.blit(_font.render(f"({r.x},{r.y},{r.w},{r.h})", True, (255, 200, 0)),
+                     (sr[0], sr[1] - 16))
+    # Room movement bounds in blue (ROOM_BOUNDS format: min_x, max_x, min_y, max_y)
+    bx0, bx1, by0, by1 = ROOM_BOUNDS.get(current_scene, (12, 288, 12, 208))
+    bsr = (int(bx0 * _SX), int(by0 * _SY),
+           int((bx1 - bx0) * _SX), int((by1 - by0) * _SY))
+    pygame.draw.rect(surface, (80, 140, 255), bsr, 2)
+    surface.blit(_font.render(f"bounds ({bx0},{bx1},{by0},{by1})", True, (80, 200, 255)),
+                 (bsr[0], bsr[1] - 16))
+    # Legend
+    pygame.draw.rect(surface, (255, 0, 0),    (8,  8, 12, 12), 2)
+    surface.blit(_font.render("F1 collision", True, (255, 200, 0)), (24,  6))
+    pygame.draw.rect(surface, (80, 140, 255), (8, 24, 12, 12), 2)
+    surface.blit(_font.render("F1 bounds",    True, (80, 200, 255)), (24, 22))
+
+
+def _draw_debug_prox(surface):
+    """Overlay proximity rects in green with object name labels (F2)."""
+    _SX = WINDOW_RES[0] / VIRTUAL_RES[0]
+    _SY = (WINDOW_RES[1] - 60) / VIRTUAL_RES[1]
+    _font = pygame.font.SysFont("consolas", 14)
+
+    def _draw_p(r, name):
+        sr = (int(r.x * _SX), int(r.y * _SY), int(r.w * _SX), int(r.h * _SY))
+        pygame.draw.rect(surface, (0, 220, 0), sr, 2)
+        surface.blit(_font.render(name, True, (0, 255, 120)), (sr[0], sr[1] - 16))
+
+    if current_scene == "living_room":
+        _draw_p(calendar_proximity_rect,        "calendar")
+        _draw_p(tv_proximity_rect,              "tv")
+        _draw_p(cabinet_proximity_rect,         "cabinet")
+        _draw_p(living_door_prox,               "living_door")
+        _draw_p(bathroom_door_prox,             "bathroom_door")
+        _draw_p(main_door_rect.inflate(5, 50), "main_door")
+    elif current_scene == "bedroom":
+        _draw_p(bedroom_door_prox, "bedroom_door")
+        _draw_p(bookshelf_prox,    "bookshelf")
+        _draw_p(computer_prox,     "computer")
+    else:  # bathroom
+        _draw_p(bathroom_exit_prox,            "exit")
+        _draw_p(sink_rect.inflate(16, 16),     "sink")
+        _draw_p(pipe_rect.inflate(12, 12),     "pipe")
+        _draw_p(toilet_rect.inflate(16, 16),   "toilet")
+        if calendar_date != DATE_1988:
+            _draw_p(mirror_rect.inflate(24, 80),   "mirror")
+            _draw_p(bathtub_rect.inflate(16, 16),  "bathtub")
+
+    pygame.draw.rect(surface, (0, 220, 0), (8, 24, 12, 12), 2)
+    surface.blit(_font.render("F2 proximity", True, (0, 255, 120)), (24, 22))
 
 
 def draw_dialogue_ui(surface):
@@ -1473,13 +1523,11 @@ while running:
         mirror_breath_timer -= 1
 
     # Proximity rects
-    calendar_proximity_rect = pygame.Rect(
-        desk_rect.centerx - 12, desk_rect.centery - 12, 24, 24).inflate(12, 16)
-    tv_proximity_rect = pygame.Rect(
-        tv_rect.centerx - 12, tv_rect.centery - 12, 24, 24).inflate(12, 16)
+    calendar_proximity_rect = calendar_rect.inflate(5, 48)
+    tv_proximity_rect       = tv_rect.inflate(5, 50)
     cabinet_proximity_rect = cabinet_rect.inflate(16, 16)
-    living_door_prox   = living_door_rect.inflate(20, 20)
-    bathroom_door_prox = bathroom_door_rect.inflate(20, 20)
+    living_door_prox   = living_door_rect.inflate(50, 0)
+    bathroom_door_prox = bathroom_door_rect.inflate(50, 0)
     bedroom_door_prox  = bedroom_door_rect.inflate(20, 20)
     bookshelf_prox     = bookshelf_rect.inflate(16, 16)
     computer_prox      = computer_desk_rect.inflate(16, 16)
@@ -1512,6 +1560,8 @@ while running:
 
             if event.key == pygame.K_F1:
                 debug_rects = not debug_rects
+            if event.key == pygame.K_F2:
+                debug_prox = not debug_prox
 
             if ui_state == "game":
                 if event.key == pygame.K_1: selected_inv_slot = 0
@@ -1539,7 +1589,7 @@ while running:
                                 _obj = "tv"
                             elif player_rect.colliderect(cabinet_proximity_rect):
                                 _obj = "cabinet"
-                            elif player_rect.colliderect(main_door_rect.inflate(16, 16)):
+                            elif player_rect.colliderect(main_door_rect.inflate(5, 50)):
                                 _obj = "frontdoor"
                     elif current_scene == "bedroom":
                         if player_rect.colliderect(bedroom_door_prox):
@@ -2065,6 +2115,8 @@ while running:
             draw_dialogue_ui(screen)
         if debug_rects:
             _draw_debug_rects(screen)
+        if debug_prox:
+            _draw_debug_prox(screen)
         draw_inventory_bar()
         pygame.display.flip()
         clock.tick(60)
@@ -2682,6 +2734,8 @@ while running:
 
     if debug_rects:
         _draw_debug_rects(screen)
+    if debug_prox:
+        _draw_debug_prox(screen)
 
     # HUD notification: show cabinet_message above inventory when in game
     if ui_state == "game" and cabinet_message:
