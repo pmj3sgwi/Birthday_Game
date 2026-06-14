@@ -1243,14 +1243,14 @@ def _do_proximity_check():
             elif player_rect.colliderect(bathroom_door_prox):
                 prompt_label = "Bathroom"
                 prompt_label_rect = bathroom_door_rect
+            elif player_rect.colliderect(tv_proximity_rect):
+                prompt_label = "TV"
+                prompt_label_rect = tv_rect
+            elif player_rect.colliderect(cabinet_proximity_rect):
+                prompt_label = "Cabinet"
+                prompt_label_rect = cabinet_rect
             elif calendar_date == DATE_2026:
-                if player_rect.colliderect(tv_proximity_rect):
-                    prompt_label = "TV"
-                    prompt_label_rect = tv_rect
-                elif player_rect.colliderect(cabinet_proximity_rect):
-                    prompt_label = "Cabinet"
-                    prompt_label_rect = cabinet_rect
-                elif player_rect.colliderect(main_door_rect.inflate(5, 100)):
+                if player_rect.colliderect(main_door_rect.inflate(5, 100)):
                     prompt_label = "Front Door"
                     prompt_label_rect = main_door_rect
     elif current_scene == "bedroom":
@@ -2613,8 +2613,9 @@ while running:
         draw_grid_calendar_ui(screen, calendar_date)
 
     elif ui_state == "tv":
+        # Darken background slightly to focus on TV, but keep game visible
         overlay = pygame.Surface(WINDOW_RES, pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 200))
+        overlay.fill((0, 0, 0, 100))
         screen.blit(overlay, (0, 0))
 
         # Select which TV image to show based on date and channel
