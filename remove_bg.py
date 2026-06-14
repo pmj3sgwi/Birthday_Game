@@ -2,10 +2,10 @@ from rembg import remove
 from PIL import Image
 
 # 1. 指定你的原始圖片路徑 (就是那張有灰白格子的圖)
-input_path = r'C:\Users\YACHI\Documents\Antigravity\Game\picture\鏡子_微霧.png'
+input_path = r'C:\Users\YACHI\Documents\Antigravity\Game\picture\1988_黑白電視.png'
 
 # 2. 指定去背後的新檔案名稱
-output_path = r'C:\Users\YACHI\Documents\Antigravity\Game\picture\鏡子_微霧_去背.png'
+output_path = r'C:\Users\YACHI\Documents\Antigravity\Game\picture\1988_黑白電視_去背.png'
 
 print("正在努力去背中，請稍候...")
 
