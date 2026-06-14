@@ -2613,11 +2613,6 @@ while running:
         draw_grid_calendar_ui(screen, calendar_date)
 
     elif ui_state == "tv":
-        # Darken background slightly to focus on TV, but keep game visible
-        overlay = pygame.Surface(WINDOW_RES, pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 100))
-        screen.blit(overlay, (0, 0))
-
         # Select which TV image to show based on date and channel
         current_tv_img = None
 
