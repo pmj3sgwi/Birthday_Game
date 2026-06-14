@@ -1713,12 +1713,13 @@ while running:
                                 _obj = "bedroom"
                             elif player_rect.colliderect(bathroom_door_prox):
                                 _obj = "bathroom"
-                            elif calendar_date == DATE_2026:
+                            elif calendar_date in (DATE_1988, DATE_2026):
                                 if player_rect.colliderect(tv_proximity_rect):
                                     _obj = "tv"
                                 elif player_rect.colliderect(cabinet_proximity_rect):
                                     _obj = "cabinet"
-                                elif player_rect.colliderect(main_door_rect.inflate(5, 100)):
+                            if calendar_date == DATE_2026:
+                                if player_rect.colliderect(main_door_rect.inflate(5, 100)):
                                     _obj = "frontdoor"
                     elif current_scene == "bedroom":
                         if player_rect.colliderect(bedroom_door_prox):
