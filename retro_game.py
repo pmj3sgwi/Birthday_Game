@@ -2261,7 +2261,7 @@ while running:
         continue
 
     # 1988 dark scene
-    if calendar_date == DATE_1988 and ui_state == "game":
+    if calendar_date == DATE_1988 and ui_state in ("game", "tv"):
         sx = WINDOW_RES[0] / VIRTUAL_RES[0]
         sy = WINDOW_RES[1] / VIRTUAL_RES[1]
         px_1080 = int(player_x * VIRTUAL_RES_1080[0] / VIRTUAL_RES[0])
