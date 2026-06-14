@@ -2315,6 +2315,36 @@ while running:
         if debug_prox:
             _draw_debug_prox(screen)
         draw_inventory_bar()
+
+        # Handle TV UI overlay for 1988
+        if ui_state == "tv":
+            current_tv_img = None
+            selected_remote = selected_inv_slot >= 0 and selected_inv_slot < len(inventory) and inventory[selected_inv_slot] == "Remote"
+            if selected_remote and tv_1988_with_remote:
+                current_tv_img = tv_1988_with_remote
+            elif tv_1988_no_remote:
+                current_tv_img = tv_1988_no_remote
+
+            if current_tv_img:
+                _tw = int(current_tv_img.get_width() * 0.3)
+                _th = int(current_tv_img.get_height() * 0.3)
+                _tx = (WINDOW_RES[0] - _tw) // 2
+                _ty = (WINDOW_RES[1] - _th) // 2
+                screen.blit(pygame.transform.scale(current_tv_img, (_tw, _th)), (_tx, _ty))
+
+                if selected_remote and remote_img:
+                    _rw = int(remote_img.get_width() * 0.2)
+                    _rh = int(remote_img.get_height() * 0.2)
+                    _rx = WINDOW_RES[0] - _rw
+                    _ry = WINDOW_RES[1] // 2 - _rh // 2
+                    screen.blit(pygame.transform.scale(remote_img, (_rw, _rh)), (_rx, _ry))
+
+            if selected_remote:
+                inst = high_res_inst_font.render("Up/Down: Change Channel | SPACE/ESC: Close", True, (200, 200, 200))
+            else:
+                inst = high_res_inst_font.render("SPACE or ESC to close  (選擇遙控器可轉台)", True, (200, 200, 200))
+            screen.blit(inst, inst.get_rect(center=(WINDOW_RES[0]//2, WINDOW_RES[1]-130)))
+
         pygame.display.flip()
         clock.tick(60)
         continue
