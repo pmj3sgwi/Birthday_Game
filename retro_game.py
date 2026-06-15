@@ -1625,7 +1625,7 @@ while running:
         mirror_breath_timer -= 1
 
     # Proximity rects
-    calendar_proximity_rect = calendar_rect.inflate(5, 100)
+    calendar_proximity_rect = calendar_rect.inflate(5, 110)
     tv_proximity_rect       = tv_rect.inflate(5, 100)
     cabinet_proximity_rect = cabinet_rect.inflate(16, 16)
     living_door_prox   = living_door_rect.inflate(50, 0)
