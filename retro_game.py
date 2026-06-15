@@ -1286,7 +1286,10 @@ def _draw_label(surface):
     _th = txt.get_height()
     _obj_top_px = int(prompt_label_rect.top * _SY)
     _obj_bot_px = int(prompt_label_rect.bottom * _SY)
-    if _obj_top_px < _th + 10:
+    # Cartridge always shows above to avoid blocking calendar
+    if prompt_label == "Cartridge":
+        ly = max(_th + 4, _obj_top_px - 6)
+    elif _obj_top_px < _th + 10:
         # Object is near top — show label BELOW the object
         ly = _obj_bot_px + _th + 6
     else:
@@ -1470,8 +1473,6 @@ def _trigger_action(obj):
             inventory.append("Tetris Cartridge")
             cabinet_message = "Got Tetris Cartridge from the desk!"; _msg_timer = 180
         tetris_cart_spawned = False
-        ui_state = "tetris"
-        init_tetris()
         dialogue_triggered = False
     elif obj == "light":
         room_lights_on = True
