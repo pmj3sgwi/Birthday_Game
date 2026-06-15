@@ -1466,9 +1466,12 @@ def _trigger_action(obj):
         ui_state = "calendar"
         dialogue_triggered = False
     elif obj == "cartridge":
-        inventory.append("Tetris Cartridge")
+        if "Tetris Cartridge" not in inventory:
+            inventory.append("Tetris Cartridge")
+            cabinet_message = "Got Tetris Cartridge from the desk!"; _msg_timer = 180
         tetris_cart_spawned = False
-        cabinet_message = "Got Tetris Cartridge from the desk!"; _msg_timer = 180
+        ui_state = "tetris"
+        init_tetris()
         dialogue_triggered = False
     elif obj == "light":
         room_lights_on = True
@@ -1622,7 +1625,7 @@ while running:
         mirror_breath_timer -= 1
 
     # Proximity rects
-    calendar_proximity_rect = calendar_rect.inflate(60, 120)
+    calendar_proximity_rect = calendar_rect.inflate(5, 100)
     tv_proximity_rect       = tv_rect.inflate(5, 100)
     cabinet_proximity_rect = cabinet_rect.inflate(16, 16)
     living_door_prox   = living_door_rect.inflate(50, 0)
