@@ -1161,19 +1161,6 @@ def render_1988_scene(px_v, py_v, pS_v, flashlight_active):
 
     elif current_scene == "bathroom":
         ds.blit(bg_1988_bathroom, (0, 0))
-        # Iron box state drawing on top of background
-        tx = toilet_rect.x * V[0] // VIRTUAL_RES[0]
-        ty = toilet_rect.y * V[1] // VIRTUAL_RES[1]
-        tw = max(1, toilet_rect.width * V[0] // VIRTUAL_RES[0])
-        th = max(1, toilet_rect.height * V[1] // VIRTUAL_RES[1])
-        if iron_box_state == 0:
-            pygame.draw.rect(ds, (160, 140, 110), (tx + 2, ty + 2, max(4, tw // 2), max(4, th // 2)))
-            pygame.draw.rect(ds, (100, 80, 60), (tx + 2, ty + 2, max(4, tw // 2), max(4, th // 2)), 1)
-        elif iron_box_state == 1:
-            pygame.draw.rect(ds, (160, 140, 110), (px_v + 6, py_v - 4, 6, 5))
-        elif iron_box_state == 2:
-            pygame.draw.rect(ds, (150, 130, 100), (ppx - 2, ppy + pph + 2, ppw + 4, 6))
-            pygame.draw.rect(ds, (100, 80, 60), (ppx - 2, ppy + pph + 2, ppw + 4, 6), 1)
 
 
     # Only apply darkness overlay when lights are OFF
@@ -1635,7 +1622,7 @@ while running:
         mirror_breath_timer -= 1
 
     # Proximity rects
-    calendar_proximity_rect = calendar_rect.inflate(5, 110)
+    calendar_proximity_rect = calendar_rect.inflate(60, 120)
     tv_proximity_rect       = tv_rect.inflate(5, 100)
     cabinet_proximity_rect = cabinet_rect.inflate(16, 16)
     living_door_prox   = living_door_rect.inflate(50, 0)
