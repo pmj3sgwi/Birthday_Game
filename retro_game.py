@@ -1211,7 +1211,7 @@ def _do_proximity_check():
         # Must select flashlight in inventory to use light switch
         has_flashlight_selected = selected_inv_slot >= 0 and selected_inv_slot < len(inventory) and inventory[selected_inv_slot] == "Flashlight"
 
-        if tetris_cart_spawned and player_rect.colliderect(calendar_proximity_rect):
+        if tetris_cart_spawned and player_rect.colliderect(tetris_proximity_rect):
             prompt_label = "Cartridge"
             prompt_label_rect = calendar_rect
         elif player_rect.colliderect(calendar_proximity_rect):
@@ -1625,7 +1625,8 @@ while running:
         mirror_breath_timer -= 1
 
     # Proximity rects
-    calendar_proximity_rect = calendar_rect.inflate(80, 150)
+    calendar_proximity_rect = calendar_rect.inflate(5, 110)
+    tetris_proximity_rect   = calendar_rect.inflate(80, 150)  # Tetris cartridge needs larger range
     tv_proximity_rect       = tv_rect.inflate(5, 100)
     cabinet_proximity_rect = cabinet_rect.inflate(16, 16)
     living_door_prox   = living_door_rect.inflate(50, 0)
@@ -1690,7 +1691,7 @@ while running:
                         is_1988_dark = calendar_date == DATE_1988 and not room_lights_on
                         has_flashlight_selected = selected_inv_slot >= 0 and selected_inv_slot < len(inventory) and inventory[selected_inv_slot] == "Flashlight"
 
-                        if tetris_cart_spawned and player_rect.colliderect(calendar_proximity_rect):
+                        if tetris_cart_spawned and player_rect.colliderect(tetris_proximity_rect):
                             _obj = "cartridge"
                         elif player_rect.colliderect(calendar_proximity_rect):
                             _obj = "calendar"
