@@ -268,7 +268,7 @@ inventory         = []
 
 # Gashapon prize input system
 gashapon_prize_input = ""  # Current input string
-gashapon_target = "JE T'AIME PLUS QUE TOUT"  # Target password
+gashapon_target = "JETAIME PLUS QUE TOUT"  # Target password (no apostrophe)
 gashapon_prize_name = "扭蛋_暫存"  # Item name to add to inventory
 
 DATE_1988         = datetime.date(1988, 6, 22)
@@ -2910,13 +2910,13 @@ while running:
         # Display input boxes for gashapon prize with word grouping
         box_width = 40
         box_height = 40
-        word_spacing_small = 55    # Spacing within words
-        word_spacing_large = 85    # Spacing between words
-        start_x = 80
+        word_spacing_small = 45    # Spacing within words (reduced from 55)
+        word_spacing_large = 60    # Spacing between words (reduced from 85)
+        start_x = 20               # Start position (reduced from 80 to fit in window)
         start_y = WINDOW_RES[1] // 2 - 100
 
-        # Define word groups
-        words = ["JE", "T'AIME", "PLUS", "QUE", "TOUT"]
+        # Define word groups (apostrophe removed from TAIME)
+        words = ["JE", "TAIME", "PLUS", "QUE", "TOUT"]
 
         # Calculate character positions
         char_positions = []
@@ -2928,6 +2928,7 @@ while running:
             current_x += word_spacing_large - word_spacing_small
 
         # Draw input boxes
+        apostrophe_pos = None  # Track position for apostrophe visual hint
         for i in range(len(gashapon_target)):
             if i >= len(char_positions):
                 break
@@ -2948,8 +2949,19 @@ while running:
                 # Highlight current input position
                 pygame.draw.rect(screen, (255, 255, 0), (box_x, box_y, box_width, box_height), 3)
 
-        # Instructions
-        inst = high_res_inst_font.render("Type password (ENTER to check | ESC: Cancel | BACKSPACE to delete)", True, (200, 200, 200))
+            # Mark position for apostrophe (between T and A in TAIME)
+            if i == 2:  # T is at position 2
+                apostrophe_pos = box_x + box_width
+
+        # Draw visual apostrophe hint between T and A
+        if apostrophe_pos:
+            apostrophe_font = pygame.font.SysFont("arial", 28, bold=True)
+            apostrophe_surf = apostrophe_font.render("'", True, (150, 150, 150))
+            apostrophe_rect = apostrophe_surf.get_rect(center=(apostrophe_pos + 7, start_y + box_height // 2))
+            screen.blit(apostrophe_surf, apostrophe_rect)
+
+        # Instructions (shortened to fit in window)
+        inst = high_res_inst_font.render("Type: JETAIME PLUS QUE TOUT | ENTER: Check | ESC: Cancel | BS: Delete", True, (200, 200, 200))
         screen.blit(inst, inst.get_rect(center=(WINDOW_RES[0]//2, WINDOW_RES[1]-130)))
 
     elif ui_state == "bookshelf":
