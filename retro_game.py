@@ -2349,6 +2349,8 @@ while running:
     if current_scene == "living_room":
         if calendar_date == DATE_2026 and bg_living:
             _use_hires_bg = bg_living
+        elif calendar_date == DATE_1988 and bg_1988_living:
+            _use_hires_bg = bg_1988_living
         elif calendar_date != DATE_1988 and bg_living_orig:
             _use_hires_bg = bg_living_orig
     elif current_scene == "bedroom" and bg_bedroom:
