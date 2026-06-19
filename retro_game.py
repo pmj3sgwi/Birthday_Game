@@ -2736,24 +2736,8 @@ while running:
         _dx = (WINDOW_RES[0] - _dw) // 2
         _dy = (WINDOW_RES[1] - _dh) // 2 - 20
 
-        # Only for 2026: show background crop behind cabinet image
-        if calendar_date != DATE_1988:
-            _SX_c = WINDOW_RES[0] / VIRTUAL_RES[0]
-            _SY_c = (WINDOW_RES[1] - 60) / VIRTUAL_RES[1]
-            _bg_src = bg_living_orig or bg_living
-            if _bg_src:
-                _cx = int(cabinet_rect.centerx * _SX_c)
-                _cy = int((cabinet_rect.centery + 40) * _SY_c)
-                _cw, _ch = 220, 320
-                _cr = pygame.Rect(_cx - _cw // 2, _cy - _ch // 3, _cw, _ch)
-                _cr = _cr.clip(pygame.Rect(0, 0, *_HIRES))
-                _cab_crop = _bg_src.subsurface(_cr)
-                screen.blit(pygame.transform.scale(_cab_crop, (_dw, _dh)), (_dx, _dy))
-            else:
-                pygame.draw.rect(screen, (120, 80, 40), pygame.Rect(_dx, _dy, _dw, _dh), border_radius=10)
-                pygame.draw.rect(screen, (80, 50, 20), pygame.Rect(_dx, _dy, _dw, _dh), 4, border_radius=10)
-
-        # Draw cabinet image (1988 uses existing background, 2026 uses crop above)
+        # Draw cabinet image directly over existing background
+        # (background already rendered by main loop)
         _ci_popup = _cab_current_img()
         if _ci_popup:
             screen.blit(pygame.transform.scale(_ci_popup, (_dw, _dh)), (_dx, _dy))
