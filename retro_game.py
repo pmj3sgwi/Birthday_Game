@@ -433,9 +433,9 @@ except Exception as e:
 
 tv_1988_with_remote = None
 try:
-    tv_1988_with_remote = pygame.image.load(get_resource_path(os.path.join("picture", "1988_黑白電視_提示_去背.png"))).convert_alpha()
+    tv_1988_with_remote = pygame.image.load(get_resource_path(os.path.join("picture", "1988_黑白電視_複雜提示_去背.png"))).convert_alpha()
 except Exception as e:
-    print(f"Could not load 1988_黑白電視_提示_去背.png: {e}")
+    print(f"Could not load 1988_黑白電視_複雜提示_去背.png: {e}")
 
 try:
     sf2_icon_raw = pygame.image.load(get_resource_path(os.path.join("picture", "SF2.jpg")))
