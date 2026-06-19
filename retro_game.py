@@ -2092,7 +2092,7 @@ while running:
     keys = pygame.key.get_pressed()
     old_x, old_y = player_x, player_y
 
-    if ui_state == "game":
+    if ui_state == "game" and not dialogue_active:
         _moved = False
         if keys[pygame.K_LEFT] or keys[pygame.K_a]:
             player_x -= player_speed; player_dir = "left"; _moved = True
@@ -2103,6 +2103,8 @@ while running:
         if keys[pygame.K_DOWN] or keys[pygame.K_s]:
             player_y += player_speed; player_dir = "down"; _moved = True
         player_moving = _moved
+    elif dialogue_active:
+        player_moving = False
 
     elif ui_state == "computer" and fighter_state == "fighting":
         if rt_p1["state"] != "attacking":
@@ -2729,22 +2731,23 @@ while running:
         screen.blit(_hint2, _hint2.get_rect(center=(WINDOW_RES[0]//2, WINDOW_RES[1] - 80)))
 
     elif ui_state == "cabinet":
-        # Crop the actual cabinet from bg image and zoom it for the dialog
-        _SX_c = WINDOW_RES[0] / VIRTUAL_RES[0]
-        _SY_c = (WINDOW_RES[1] - 60) / VIRTUAL_RES[1]
-        # Use 1988 background for 1988 year
-        if calendar_date == DATE_1988:
-            _bg_src = bg_1988_living
-        else:
-            _bg_src = bg_living_orig or bg_living
+        # Display cabinet background
         _dw, _dh = 440, 560
         _dx = (WINDOW_RES[0] - _dw) // 2
         _dy = (WINDOW_RES[1] - _dh) // 2 - 20
-        if _bg_src:
-            _ci_popup = _cab_current_img()
-            if _ci_popup:
-                screen.blit(pygame.transform.scale(_ci_popup, (_dw, _dh)), (_dx, _dy))
-            else:
+
+        # For 1988, show the actual 1988 background; for 2026, crop from hires bg
+        if calendar_date == DATE_1988:
+            # 1988: directly display the background (no crop needed)
+            if bg_1988_living:
+                _bg_scaled = pygame.transform.scale(bg_1988_living, (_dw, _dh))
+                screen.blit(_bg_scaled, (_dx, _dy))
+        else:
+            # 2026: crop from hires background
+            _bg_src = bg_living_orig or bg_living
+            _SX_c = WINDOW_RES[0] / VIRTUAL_RES[0]
+            _SY_c = (WINDOW_RES[1] - 60) / VIRTUAL_RES[1]
+            if _bg_src:
                 _cx = int(cabinet_rect.centerx * _SX_c)
                 _cy = int((cabinet_rect.centery + 40) * _SY_c)
                 _cw, _ch = 220, 320
@@ -2752,9 +2755,14 @@ while running:
                 _cr = _cr.clip(pygame.Rect(0, 0, *_HIRES))
                 _cab_crop = _bg_src.subsurface(_cr)
                 screen.blit(pygame.transform.scale(_cab_crop, (_dw, _dh)), (_dx, _dy))
-        else:
-            pygame.draw.rect(screen, (120, 80, 40), pygame.Rect(_dx, _dy, _dw, _dh), border_radius=10)
-            pygame.draw.rect(screen, (80, 50, 20), pygame.Rect(_dx, _dy, _dw, _dh), 4, border_radius=10)
+            else:
+                pygame.draw.rect(screen, (120, 80, 40), pygame.Rect(_dx, _dy, _dw, _dh), border_radius=10)
+                pygame.draw.rect(screen, (80, 50, 20), pygame.Rect(_dx, _dy, _dw, _dh), 4, border_radius=10)
+
+        # Draw cabinet image overlay on top of background
+        _ci_popup = _cab_current_img()
+        if _ci_popup:
+            screen.blit(pygame.transform.scale(_ci_popup, (_dw, _dh)), (_dx, _dy))
 
         _d1_rect = pygame.Rect(_dx + 30, _dy + _dh // 4, _dw - 60, _dh // 4)
         _d2_rect = pygame.Rect(_dx + 30, _dy + _dh // 2 + 10, _dw - 60, _dh // 4)
