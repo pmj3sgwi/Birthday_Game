@@ -1233,7 +1233,7 @@ def _do_proximity_check():
             elif player_rect.colliderect(tv_proximity_rect):
                 prompt_label = "TV"
                 prompt_label_rect = tv_rect
-            elif player_rect.colliderect(cabinet_proximity_rect):
+            elif calendar_date != DATE_1988 and player_rect.colliderect(cabinet_proximity_rect):
                 prompt_label = "Cabinet"
                 prompt_label_rect = cabinet_rect
             elif calendar_date == DATE_2026:
@@ -1709,7 +1709,7 @@ while running:
                             elif calendar_date in (DATE_1988, DATE_2026):
                                 if player_rect.colliderect(tv_proximity_rect):
                                     _obj = "tv"
-                                elif player_rect.colliderect(cabinet_proximity_rect):
+                                elif calendar_date != DATE_1988 and player_rect.colliderect(cabinet_proximity_rect):
                                     _obj = "cabinet"
                             if calendar_date == DATE_2026:
                                 if player_rect.colliderect(main_door_rect.inflate(5, 100)):
