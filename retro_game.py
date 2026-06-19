@@ -266,6 +266,11 @@ debug_rects       = False  # F1 to toggle collision rect overlay
 debug_prox        = False  # F2 to toggle proximity rect overlay
 inventory         = []
 
+# Gashapon prize input system
+gashapon_prize_input = ""  # Current input string
+gashapon_target = "JE T'AIME PLUS QUE TOUT"  # Target password
+gashapon_prize_name = "扭蛋_暫存"  # Item name to add to inventory
+
 DATE_1988         = datetime.date(1988, 6, 22)
 DATE_2026         = datetime.date(2026, 6, 22)
 selected_inv_slot = -1  # -1 means no selection
@@ -2006,6 +2011,29 @@ while running:
             elif ui_state == "gashapon":
                 if event.key == pygame.K_ESCAPE:
                     ui_state = "iron_cabinet"
+                elif event.key == pygame.K_SPACE:
+                    # Start gashapon prize input
+                    gashapon_prize_input = ""
+                    ui_state = "gashapon_prize"
+
+            elif ui_state == "gashapon_prize":
+                if event.key == pygame.K_ESCAPE:
+                    ui_state = "gashapon"
+                elif event.key == pygame.K_BACKSPACE:
+                    # Delete last character
+                    if len(gashapon_prize_input) > 0:
+                        gashapon_prize_input = gashapon_prize_input[:-1]
+                elif event.key == pygame.K_RETURN:
+                    # Check if input matches target
+                    if gashapon_prize_input == gashapon_target:
+                        # Success - add item to inventory
+                        if gashapon_prize_name not in inventory:
+                            inventory.append(gashapon_prize_name)
+                        ui_state = "gashapon"
+                        gashapon_prize_input = ""
+                    else:
+                        # Wrong answer - clear and stay in input mode
+                        gashapon_prize_input = ""
 
             elif ui_state == "bookshelf":
                 if event.key == pygame.K_ESCAPE:
@@ -2087,6 +2115,13 @@ while running:
                     _msg_timer = 180
                     ui_state = "game"
                     pygame.event.clear(pygame.KEYDOWN)
+
+        elif event.type == pygame.TEXTINPUT:
+            # Handle text input for gashapon prize
+            if ui_state == "gashapon_prize":
+                # Limit input length to target length
+                if len(gashapon_prize_input) < len(gashapon_target):
+                    gashapon_prize_input += event.unicode.upper()
 
     # Player movement
     keys = pygame.key.get_pressed()
@@ -2866,6 +2901,44 @@ while running:
         screen.blit(inst, inst.get_rect(center=(WINDOW_RES[0]//2, WINDOW_RES[1]-130)))
 
         draw_inventory_bar()
+
+    elif ui_state == "gashapon_prize":
+        overlay = pygame.Surface(WINDOW_RES, pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 185))
+        screen.blit(overlay, (0, 0))
+
+        # Display input boxes for gashapon prize
+        box_width = 40
+        box_height = 40
+        box_spacing = 50
+        boxes_per_row = 9
+        start_x = (WINDOW_RES[0] - boxes_per_row * box_spacing) // 2
+        start_y = WINDOW_RES[1] // 2 - 100
+
+        # Draw input boxes
+        for i in range(len(gashapon_target)):
+            row = i // boxes_per_row
+            col = i % boxes_per_row
+            box_x = start_x + col * box_spacing
+            box_y = start_y + row * box_spacing
+
+            # Draw box border
+            pygame.draw.rect(screen, (200, 200, 200), (box_x, box_y, box_width, box_height), 2)
+
+            # Draw character if input exists at this position
+            if i < len(gashapon_prize_input):
+                char = gashapon_prize_input[i]
+                char_font = pygame.font.SysFont("arial", 24, bold=True)
+                char_surf = char_font.render(char, True, (200, 200, 200))
+                char_rect = char_surf.get_rect(center=(box_x + box_width // 2, box_y + box_height // 2))
+                screen.blit(char_surf, char_rect)
+            elif i == len(gashapon_prize_input):
+                # Highlight current input position
+                pygame.draw.rect(screen, (255, 255, 0), (box_x, box_y, box_width, box_height), 3)
+
+        # Instructions
+        inst = high_res_inst_font.render("Type password (ENTER to check | ESC: Cancel | BACKSPACE to delete)", True, (200, 200, 200))
+        screen.blit(inst, inst.get_rect(center=(WINDOW_RES[0]//2, WINDOW_RES[1]-130)))
 
     elif ui_state == "bookshelf":
         overlay = pygame.Surface(WINDOW_RES, pygame.SRCALPHA)
