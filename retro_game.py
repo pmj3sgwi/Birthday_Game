@@ -1247,13 +1247,13 @@ def _do_proximity_check():
         elif player_rect.colliderect(bookshelf_prox):
             prompt_label = "Bookshelf"
             prompt_label_rect = bookshelf_rect
-        elif player_rect.colliderect(computer_prox):
+        elif calendar_date != DATE_1988 and player_rect.colliderect(computer_prox):
             prompt_label = "Computer"
             prompt_label_rect = computer_desk_rect
         elif player_rect.colliderect(bed_rect.inflate(16, 16)):
             prompt_label = "Bed"
             prompt_label_rect = bed_rect
-        elif player_rect.colliderect(iron_cabinet_rect.inflate(16, 16)):
+        elif calendar_date != DATE_1988 and player_rect.colliderect(iron_cabinet_rect.inflate(16, 16)):
             prompt_label = "Iron Cabinet"
             prompt_label_rect = iron_cabinet_rect
     elif current_scene == "bathroom":
@@ -1719,11 +1719,11 @@ while running:
                             _obj = "livingroom"
                         elif player_rect.colliderect(bookshelf_prox):
                             _obj = "bookshelf"
-                        elif player_rect.colliderect(computer_prox):
+                        elif calendar_date != DATE_1988 and player_rect.colliderect(computer_prox):
                             _obj = "computer"
                         elif player_rect.colliderect(bed_rect.inflate(16, 16)):
                             _obj = "bed"
-                        elif player_rect.colliderect(iron_cabinet_rect.inflate(16, 16)):
+                        elif calendar_date != DATE_1988 and player_rect.colliderect(iron_cabinet_rect.inflate(16, 16)):
                             _obj = "iron_cabinet"
                     elif current_scene == "bathroom":
                         if player_rect.colliderect(bathroom_exit_prox):
