@@ -2121,7 +2121,7 @@ while running:
             if ui_state == "gashapon_prize":
                 # Limit input length to target length
                 if len(gashapon_prize_input) < len(gashapon_target):
-                    gashapon_prize_input += event.unicode.upper()
+                    gashapon_prize_input += event.text.upper()
 
     # Player movement
     keys = pygame.key.get_pressed()
