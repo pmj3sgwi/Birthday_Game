@@ -2731,18 +2731,12 @@ while running:
         screen.blit(_hint2, _hint2.get_rect(center=(WINDOW_RES[0]//2, WINDOW_RES[1] - 80)))
 
     elif ui_state == "cabinet":
-        # For 1988, display 1988 background as the base layer
-        if calendar_date == DATE_1988 and bg_1988_living:
-            _dw, _dh = WINDOW_RES[0], WINDOW_RES[1] - 60
-            _scaled_bg = pygame.transform.scale(bg_1988_living, (_dw, _dh))
-            screen.blit(_scaled_bg, (0, 0))
-
-        # Cabinet dialog box
+        # Cabinet dialog box (displayed over existing background)
         _dw, _dh = 440, 560
         _dx = (WINDOW_RES[0] - _dw) // 2
         _dy = (WINDOW_RES[1] - _dh) // 2 - 20
 
-        # Crop the actual cabinet from bg image and zoom it for the dialog
+        # Only for 2026: show background crop behind cabinet image
         if calendar_date != DATE_1988:
             _SX_c = WINDOW_RES[0] / VIRTUAL_RES[0]
             _SY_c = (WINDOW_RES[1] - 60) / VIRTUAL_RES[1]
@@ -2759,7 +2753,7 @@ while running:
                 pygame.draw.rect(screen, (120, 80, 40), pygame.Rect(_dx, _dy, _dw, _dh), border_radius=10)
                 pygame.draw.rect(screen, (80, 50, 20), pygame.Rect(_dx, _dy, _dw, _dh), 4, border_radius=10)
 
-        # Draw cabinet image overlay
+        # Draw cabinet image (1988 uses existing background, 2026 uses crop above)
         _ci_popup = _cab_current_img()
         if _ci_popup:
             screen.blit(pygame.transform.scale(_ci_popup, (_dw, _dh)), (_dx, _dy))
