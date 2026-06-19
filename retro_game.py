@@ -245,7 +245,7 @@ prev_calendar_date = calendar_date
 
 font               = pygame.font.SysFont("consolas", 16)
 high_res_big_font  = pygame.font.SysFont("consolas", 48)
-high_res_inst_font = pygame.font.SysFont("consolas", 36)
+high_res_inst_font = pygame.font.SysFont("consolas", 28)
 cal_header_font    = pygame.font.SysFont("consolas", 30)
 cal_day_font       = pygame.font.SysFont("consolas", 24)
 inv_font           = pygame.font.SysFont("consolas", 22)
@@ -2907,29 +2907,41 @@ while running:
         overlay.fill((0, 0, 0, 185))
         screen.blit(overlay, (0, 0))
 
-        # Display input boxes for gashapon prize
+        # Display input boxes for gashapon prize with word grouping
         box_width = 40
         box_height = 40
-        box_spacing = 50
-        boxes_per_row = 9
-        start_x = (WINDOW_RES[0] - boxes_per_row * box_spacing) // 2
+        word_spacing_small = 55    # Spacing within words
+        word_spacing_large = 85    # Spacing between words
+        start_x = 80
         start_y = WINDOW_RES[1] // 2 - 100
+
+        # Define word groups
+        words = ["JE", "T'AIME", "PLUS", "QUE", "TOUT"]
+
+        # Calculate character positions
+        char_positions = []
+        current_x = start_x
+        for word in words:
+            for char in word:
+                char_positions.append((char, current_x))
+                current_x += word_spacing_small
+            current_x += word_spacing_large - word_spacing_small
 
         # Draw input boxes
         for i in range(len(gashapon_target)):
-            row = i // boxes_per_row
-            col = i % boxes_per_row
-            box_x = start_x + col * box_spacing
-            box_y = start_y + row * box_spacing
+            if i >= len(char_positions):
+                break
+            char, box_x = char_positions[i]
+            box_y = start_y
 
             # Draw box border
             pygame.draw.rect(screen, (200, 200, 200), (box_x, box_y, box_width, box_height), 2)
 
             # Draw character if input exists at this position
             if i < len(gashapon_prize_input):
-                char = gashapon_prize_input[i]
+                input_char = gashapon_prize_input[i]
                 char_font = pygame.font.SysFont("arial", 24, bold=True)
-                char_surf = char_font.render(char, True, (200, 200, 200))
+                char_surf = char_font.render(input_char, True, (200, 200, 200))
                 char_rect = char_surf.get_rect(center=(box_x + box_width // 2, box_y + box_height // 2))
                 screen.blit(char_surf, char_rect)
             elif i == len(gashapon_prize_input):
