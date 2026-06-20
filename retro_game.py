@@ -270,6 +270,9 @@ inventory         = []
 gashapon_prize_input = ""  # Current input string
 gashapon_target = "JETAIME PLUS QUE TOUT"  # Target password (no apostrophe)
 gashapon_prize_name = "扭蛋_暫存"  # Item name to add to inventory
+gashapon_edit_pos = 0  # Current cursor position for editing
+gashapon_feedback = ""  # Feedback message (correct/incorrect)
+gashapon_feedback_timer = 0  # Timer for feedback message display
 
 DATE_1988         = datetime.date(1988, 6, 22)
 DATE_2026         = datetime.date(2026, 6, 22)
@@ -2018,22 +2021,40 @@ while running:
 
             elif ui_state == "gashapon_prize":
                 if event.key == pygame.K_ESCAPE:
+                    gashapon_edit_pos = 0
                     ui_state = "gashapon"
                 elif event.key == pygame.K_BACKSPACE:
-                    # Delete last character
-                    if len(gashapon_prize_input) > 0:
-                        gashapon_prize_input = gashapon_prize_input[:-1]
+                    # Delete character before cursor
+                    if gashapon_edit_pos > 0:
+                        gashapon_prize_input = gashapon_prize_input[:gashapon_edit_pos-1] + gashapon_prize_input[gashapon_edit_pos:]
+                        gashapon_edit_pos -= 1
+                elif event.key == pygame.K_DELETE:
+                    # Delete character at cursor
+                    if gashapon_edit_pos < len(gashapon_prize_input):
+                        gashapon_prize_input = gashapon_prize_input[:gashapon_edit_pos] + gashapon_prize_input[gashapon_edit_pos+1:]
+                elif event.key == pygame.K_LEFT:
+                    # Move cursor left
+                    gashapon_edit_pos = max(0, gashapon_edit_pos - 1)
+                elif event.key == pygame.K_RIGHT:
+                    # Move cursor right
+                    gashapon_edit_pos = min(len(gashapon_prize_input), gashapon_edit_pos + 1)
                 elif event.key == pygame.K_RETURN:
                     # Check if input matches target
                     if gashapon_prize_input == gashapon_target:
                         # Success - add item to inventory
                         if gashapon_prize_name not in inventory:
                             inventory.append(gashapon_prize_name)
+                        gashapon_feedback = "Correct! Got 扭蛋_暫存!"
+                        gashapon_feedback_timer = 180  # 3 seconds
                         ui_state = "gashapon"
                         gashapon_prize_input = ""
+                        gashapon_edit_pos = 0
                     else:
-                        # Wrong answer - clear and stay in input mode
+                        # Wrong answer - clear and show feedback
+                        gashapon_feedback = "Incorrect! Try again."
+                        gashapon_feedback_timer = 120  # 2 seconds
                         gashapon_prize_input = ""
+                        gashapon_edit_pos = 0
 
             elif ui_state == "bookshelf":
                 if event.key == pygame.K_ESCAPE:
@@ -2119,9 +2140,10 @@ while running:
         elif event.type == pygame.TEXTINPUT:
             # Handle text input for gashapon prize
             if ui_state == "gashapon_prize":
-                # Limit input length to target length
+                # Insert character at cursor position
                 if len(gashapon_prize_input) < len(gashapon_target):
-                    gashapon_prize_input += event.text.upper()
+                    gashapon_prize_input = gashapon_prize_input[:gashapon_edit_pos] + event.text.upper() + gashapon_prize_input[gashapon_edit_pos:]
+                    gashapon_edit_pos += 1
 
     # Player movement
     keys = pygame.key.get_pressed()
@@ -2945,8 +2967,12 @@ while running:
                 char_surf = char_font.render(input_char, True, (200, 200, 200))
                 char_rect = char_surf.get_rect(center=(box_x + box_width // 2, box_y + box_height // 2))
                 screen.blit(char_surf, char_rect)
-            elif i == len(gashapon_prize_input):
-                # Highlight current input position
+
+            # Highlight cursor position with green border
+            if i == gashapon_edit_pos:
+                pygame.draw.rect(screen, (0, 255, 0), (box_x, box_y, box_width, box_height), 3)
+            elif i == len(gashapon_prize_input) and gashapon_edit_pos == len(gashapon_prize_input):
+                # Also show yellow highlight when cursor is at end
                 pygame.draw.rect(screen, (255, 255, 0), (box_x, box_y, box_width, box_height), 3)
 
             # Mark position for apostrophe (between T and A in TAIME)
@@ -2956,9 +2982,15 @@ while running:
         # Draw visual apostrophe hint between T and A
         if apostrophe_pos:
             apostrophe_font = pygame.font.SysFont("arial", 28, bold=True)
-            apostrophe_surf = apostrophe_font.render("'", True, (150, 150, 150))
-            apostrophe_rect = apostrophe_surf.get_rect(center=(apostrophe_pos + 7, start_y + box_height // 2))
+            apostrophe_surf = apostrophe_font.render("'", True, (200, 200, 200))  # Brighter gray for visibility
+            apostrophe_rect = apostrophe_surf.get_rect(center=(apostrophe_pos + 7, start_y + 20))  # Adjusted Y position
             screen.blit(apostrophe_surf, apostrophe_rect)
+
+        # Display feedback message if available
+        if gashapon_feedback and gashapon_feedback_timer > 0:
+            feedback_color = (100, 255, 100) if "Correct" in gashapon_feedback else (255, 100, 100)
+            feedback_surf = high_res_inst_font.render(gashapon_feedback, True, feedback_color)
+            screen.blit(feedback_surf, feedback_surf.get_rect(center=(WINDOW_RES[0]//2, start_y - 50)))
 
         # Instructions (shortened to fit in window)
         inst = high_res_inst_font.render("Type: JETAIME PLUS QUE TOUT | ENTER: Check | ESC: Cancel | BS: Delete", True, (200, 200, 200))
@@ -3104,6 +3136,12 @@ while running:
         nr.left  = max(4, nr.left)
         nr.right = min(WINDOW_RES[0] - 4, nr.right)
         screen.blit(notif, nr)
+
+    # Update gashapon feedback timer
+    if gashapon_feedback_timer > 0:
+        gashapon_feedback_timer -= 1
+    else:
+        gashapon_feedback = ""
 
     pygame.display.flip()
     clock.tick(60)
