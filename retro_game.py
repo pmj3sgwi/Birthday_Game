@@ -215,14 +215,14 @@ ROOM_BOUNDS = {
 desk_rect           = pygame.Rect(105, 32, 120, 80)        # TV console 含植物+電視+月曆
 calendar_rect       = pygame.Rect(195, 50, 14, 12)                           # 月曆圖示
 tv_rect             = pygame.Rect(145, 32, 40, 35)         # 電視螢幕區域
-cabinet_rect        = pygame.Rect(25, 35, 50, 70)          # 左側邊桌/抽屜
-living_door_rect    = pygame.Rect(15, 120, 10, 50)         # 左牆門→臥室
+cabinet_rect        = pygame.Rect(25, 35, 50, 90)          # 左側邊桌/抽屜
+living_door_rect    = pygame.Rect(15, 130, 10, 50)         # 左牆門→臥室
 sofa_rect           = pygame.Rect(90, 190, 130, 50)        # 沙發
 
 # Bedroom (top-down view)
 bedroom_door_rect   = pygame.Rect(280, 115, 18, 65)  # right wall door（下方，y=142-207）
 bookshelf_rect      = pygame.Rect(20, 30, 57, 97)    # 左側書架（頂牆靠左）
-computer_desk_rect  = pygame.Rect(78, 30, 139, 90)   # 電腦桌（頂牆中央）
+computer_desk_rect  = pygame.Rect(78, 30, 110, 90)   # 電腦桌（頂牆中央）
 
 # Bedroom new objects
 bed_rect            = pygame.Rect(180, 30, 100, 90)   # 床
@@ -1447,7 +1447,7 @@ def _do_proximity_check():
             chi_baby_rect = pygame.Rect(chi_baby_x - 10, chi_baby_y - 10, 20, 20)
             chi_baby_proximity = chi_baby_rect.inflate(80, 80)  # 80 pixel proximity range
             if player_rect.colliderect(chi_baby_proximity):
-                prompt_label = "Give Pacifier"
+                prompt_label = "Chi Baby"
                 prompt_label_rect = chi_baby_rect
 
     elif current_scene == "bedroom":
@@ -1460,7 +1460,7 @@ def _do_proximity_check():
         elif calendar_date != DATE_1988 and player_rect.colliderect(computer_prox):
             prompt_label = "Computer"
             prompt_label_rect = computer_desk_rect
-        elif player_rect.colliderect(bed_rect.inflate(16, 16)):
+        elif calendar_date != DATE_1988 and player_rect.colliderect(bed_rect.inflate(16, 16)):
             prompt_label = "Bed"
             prompt_label_rect = bed_rect
         elif player_rect.colliderect(iron_cabinet_rect.inflate(16, 16)):
@@ -1716,8 +1716,10 @@ def _trigger_action(obj):
     dialogue_triggered = True
     if obj == "tv":
         ui_state = "tv"
+        dialogue_triggered = False
     elif obj == "cabinet":
         ui_state = "cabinet"
+        dialogue_triggered = False
     elif obj == "calendar":
         ui_state = "calendar"
         dialogue_triggered = False
@@ -1873,8 +1875,8 @@ def draw_inventory_bar():
                     pygame.draw.rect(screen, (60, 60, 180), sr.inflate(-12, -8))
                     pygame.draw.rect(screen, (100, 100, 220), sr.inflate(-12, -8), 2)
             elif item in gashapon_prize_images:
-                icon = pygame.transform.scale(gashapon_prize_images[item], (slot_size - 2, slot_size - 8))
-                screen.blit(icon, (sr.x + 1, sr.y + 4))
+                icon = pygame.transform.smoothscale(gashapon_prize_images[item], (slot_size + 10, slot_size - 8))
+                screen.blit(icon, (sr.x - 5, sr.y + 4))
             elif item == "Chi的奶嘴_去背.png":
                 if chi_pacifier_icon:
                     icon = pygame.transform.scale(chi_pacifier_icon, (slot_size - 8, slot_size - 8))
@@ -2076,7 +2078,7 @@ while running:
                             _obj = "bookshelf"
                         elif calendar_date != DATE_1988 and player_rect.colliderect(computer_prox):
                             _obj = "computer"
-                        elif player_rect.colliderect(bed_rect.inflate(16, 16)):
+                        elif calendar_date != DATE_1988 and player_rect.colliderect(bed_rect.inflate(16, 16)):
                             _obj = "bed"
                         elif player_rect.colliderect(iron_cabinet_rect.inflate(16, 16)):
                             _obj = "iron_cabinet"
@@ -2456,7 +2458,7 @@ while running:
                             ui_state = "game"
                             cabinet_message = "Got SF2 Cartridge!"; _msg_timer = 180
 
-                    if bookshelf_order == ["Blue", "Green", "Red"] and not bookshelf_unlocked:
+                    if bookshelf_order == ["Green", "Blue", "Red"] and not bookshelf_unlocked:
                         bookshelf_unlocked = True
 
             elif ui_state == "main_door":
@@ -3314,17 +3316,12 @@ while running:
             pygame.draw.rect(screen, (255, 255, 80), _bd2, _border_width, border_radius=6)
 
         if cabinet_message:
-            msg = high_res_inst_font.render(cabinet_message, True, (255, 100, 100))
+            _cab_is_warning = cabinet_message in ("This drawer is locked. Need a key.", "Need to select the key in inventory!")
+            _cab_msg_color = (255, 120, 120) if _cab_is_warning else (255, 230, 150)
+            msg = high_res_inst_font.render(cabinet_message, True, _cab_msg_color)
             screen.blit(msg, msg.get_rect(center=(WINDOW_RES[0] // 2, _dy - 40)))
         inst = high_res_inst_font.render("Up/Dn: Select | SPACE: Open/Interact | ESC: Close", True, (220, 220, 220))
         screen.blit(inst, inst.get_rect(center=(WINDOW_RES[0] // 2, WINDOW_RES[1] - 110)))
-        if dialogue_triggered:
-            _bust_src = player_img_1988_idle if calendar_date == DATE_1988 else player_img_2026_idle
-            if _bust_src:
-                _bh = 200
-                _bw = int(_bust_src.get_width() * _bh / _bust_src.get_height())
-                _bust = pygame.transform.scale(_bust_src, (_bw, _bh))
-                screen.blit(_bust, (WINDOW_RES[0] - _bw - 10, WINDOW_RES[1] - 60 - _bh))
 
     elif ui_state == "computer_idle":
         overlay = pygame.Surface(WINDOW_RES, pygame.SRCALPHA)
@@ -3596,7 +3593,7 @@ while running:
         colors = {"Red": (190, 55, 50), "Blue": (50, 75, 165), "Green": (55, 140, 70)}
 
         if calendar_date == DATE_1988:
-            display_order = ["Blue", "Green", "Red"]
+            display_order = ["Green", "Blue", "Red"]
         else:
             display_order = bookshelf_order
 
@@ -3629,13 +3626,13 @@ while running:
         
         # 4 slots, one per gashapon prize
         for i in range(4):
-            slot_r = pygame.Rect(d_rect.x + 70 + i*65, d_rect.centery, 50, 50)
+            slot_r = pygame.Rect(d_rect.x + 30 + i*90, d_rect.centery - 40, 80, 80)
             pygame.draw.rect(screen, (20, 20, 20), slot_r)
             if door_puzzle_state[i]:
                 _prize_img = gashapon_prize_images.get(GASHAPON_PRIZES[i])
                 if _prize_img:
-                    icon = pygame.transform.scale(_prize_img, (slot_r.width - 4, slot_r.height - 4))
-                    screen.blit(icon, (slot_r.x + 2, slot_r.y + 2))
+                    icon = pygame.transform.smoothscale(_prize_img, (slot_r.width + 14, slot_r.height - 4))
+                    screen.blit(icon, (slot_r.x - 7, slot_r.y + 2))
                 else:
                     pygame.draw.rect(screen, (255, 100, 255), slot_r.inflate(-10, -10))
 
@@ -3643,7 +3640,7 @@ while running:
             msg = high_res_inst_font.render("DOOR OPENED! YOU ESCAPED!", True, (0, 255, 0))
         else:
             msg = high_res_inst_font.render("SPACE: Insert Gashapon | ESC: Close", True, (200, 200, 200))
-        screen.blit(msg, msg.get_rect(center=(WINDOW_RES[0]//2, WINDOW_RES[1]-100)))
+        screen.blit(msg, msg.get_rect(center=(WINDOW_RES[0]//2, WINDOW_RES[1]-130)))
 
     elif ui_state == "sink":
         overlay = pygame.Surface(WINDOW_RES, pygame.SRCALPHA)
@@ -3710,7 +3707,7 @@ while running:
             msg = high_res_inst_font.render("This date feels familiar... (Easter Egg Place)", True, (200, 200, 200))
             screen.blit(msg, msg.get_rect(center=(WINDOW_RES[0]//2, 50)))
         elif calendar_date == datetime.date(1994, 10, 23):
-            msg = high_res_inst_font.render("A strange memory surfaces... (Easter Egg Place)", True, (200, 200, 200))
+            msg = high_res_inst_font.render("Chi Baby is crying... give them a pacifier!", True, (200, 200, 200))
             screen.blit(msg, msg.get_rect(center=(WINDOW_RES[0]//2, 50)))
 
     # Inventory bar (hidden when calendar is open)
