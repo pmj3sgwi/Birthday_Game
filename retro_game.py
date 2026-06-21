@@ -251,13 +251,14 @@ cal_day_font       = pygame.font.SysFont("consolas", 24)
 inv_font           = pygame.font.SysFont("consolas", 22)
 cal_inst_font      = pygame.font.SysFont("consolas", 18)
 
-ui_state          = "game"
+ui_state          = "title"
 calendar_stage    = "year" # "year" | "month" | "day"
 
 cabinet_selection = 0
 cabinet_drawer1_open = False
 cabinet_drawer2_open = False
 cabinet_item_pending = None  # item visible in open drawer, not yet picked up
+cabinet_l2_coin_taken = False  # whether the coin left behind in drawer 2 has been collected
 has_flashlight    = False
 has_key           = False
 cabinet_message   = ""
@@ -266,19 +267,40 @@ debug_rects       = False  # F1 to toggle collision rect overlay
 debug_prox        = False  # F2 to toggle proximity rect overlay
 inventory         = []
 
-# Gashapon prize input system
-gashapon_prize_input = ""  # Current input string
-gashapon_target = "JETAIME PLUS QUE TOUT"  # Target password (no apostrophe)
-gashapon_prize_name = "扭蛋_暫存"  # Item name to add to inventory
-gashapon_edit_pos = 0  # Current cursor position for editing
-gashapon_feedback = ""  # Feedback message (correct/incorrect)
+# Iron cabinet password lock
+iron_cabinet_unlocked = False
+iron_cabinet_coin_taken = False  # whether the coin left inside the unlocked cabinet has been collected
+iron_cabinet_scare_start = 0  # tick when the 1988 jump-scare started
+outdoor_message_shown = False  # whether the birthday message popup is showing
+cabinet_password_input = ""  # Current input string
+cabinet_password_target = "JETAIMEPLUSQUETOUT"  # Target password (18 chars, no spaces, no apostrophe)
+cabinet_password_edit_pos = 0  # Current cursor position for editing
+cabinet_password_feedback = ""  # Feedback message (correct/incorrect)
+cabinet_password_feedback_timer = 0  # Timer for feedback message display
+
+# Gashapon (coin-operated) prize system
+GASHAPON_PRIZES = ["扭蛋_皮克敏_去背.png", "扭蛋_烏薩奇_去背.png", "扭蛋_恐龍_去背.png", "扭蛋_韓立_去背.png"]
+gashapon_last_prize = None  # most recently drawn prize, used for the popup icon
+gashapon_feedback = ""  # Feedback message (success/need coin)
 gashapon_feedback_timer = 0  # Timer for feedback message display
 
 DATE_1988         = datetime.date(1988, 6, 22)
 DATE_2026         = datetime.date(2026, 6, 22)
+DATE_1994_10_23   = datetime.date(1994, 10, 23)
 selected_inv_slot = -1  # -1 means no selection
 last_inv_slot_key = -1  # track last pressed number key for toggle behavior
 tv_channel = 0  # current TV channel selection (0=normal, 1=TETRIS)
+chi_baby_x = 150  # Chi baby X position
+chi_baby_y = 160  # Chi baby Y position
+chi_baby_dir_x = 1  # Chi baby X direction: 1=right, -1=left
+chi_baby_dir_y = 0  # Chi baby Y direction: 1=down, -1=up, 0=stop
+chi_baby_speed = 1  # Chi baby movement speed
+chi_baby_img = None  # Chi baby image cache
+chi_baby_change_dir_timer = 0  # Timer for random direction changes
+chi_baby_has_pacifier = False  # Chi baby has received pacifier
+chi_baby_img_with_pacifier = None  # Chi baby with pacifier image
+coin_items = []  # List of coins that fell from Chi baby
+coin_img = None  # Coin image cache
 room_lights_on    = False
 # Light switch in 1920×1080 space (scaled from 320×240 _SW_N* constants)
 light_switch_rect_1988 = pygame.Rect(
@@ -311,7 +333,7 @@ DIALOGUE_MAP = {
     "livingroom":   ("Should I head back to the living room?",  True),
     "bookshelf":    ("These books look out of order...",        True),
     "computer":     ("Should I play some games?",               True),
-    "bed":          ("Should I check out this bed?",            True),
+    "bed":          ("There's a notebook on the bed. Take a look?", True),
     "iron_cabinet": ("Let me open this cabinet...",             True),
     "exit":         ("Should I head back?",                     True),
     "sink":         ("Let me take a look at this sink.",        True),
@@ -322,6 +344,7 @@ DIALOGUE_MAP = {
     "shelf":        ("Should I inspect the shelf?",             True),
     "mirror":       ("Should I look at the mirror?",             True),
     "bathtub":      ("Should I fill the bathtub?",              True),
+    "chi_baby":     ("Should I give this pacifier to Chi Baby?", True),
 }
 
 # Puzzle & Interaction States
@@ -332,7 +355,7 @@ bookshelf_unlocked = False
 iron_box_state    = 0  # 0: shelf, 1: holding, 2: under pipe, 3: rusty, 4: broken
 cup_state         = 0  # 0: intact, 1: crushed
 tetris_cart_spawned = False
-tetris_cart_rect  = pygame.Rect(desk_rect.centerx - 7, desk_rect.y + 4, 12, 8)  # On the desk
+tetris_cart_rect  = pygame.Rect(desk_rect.centerx - 9, desk_rect.y + 3, 18, 24)  # On the desk
 
 main_door_rect    = pygame.Rect(225, 28, 52, 10)     # 主大門
 door_puzzle_state = [False, False, False, False]
@@ -379,7 +402,11 @@ tetris_won         = False
 tetris_fall_time   = 0
 tetris_fall_speed  = 350  # ms - starts fast (high difficulty)
 tetris_just_exited = False # prevents immediate re-trigger
-has_mystery_cube   = False
+tetris_coin_given  = False  # one-time Tetris win reward
+tetris_move_dir    = 0   # -1 left, 1 right, 0 none — held direction for auto-repeat (DAS)
+tetris_move_timer  = 0   # ms timestamp for the next auto-repeat shift
+TETRIS_DAS_DELAY    = 200  # ms held before auto-repeat kicks in
+TETRIS_DAS_INTERVAL = 50   # ms between repeated shifts once auto-repeat is active
 
 
 
@@ -433,6 +460,20 @@ except Exception as e:
     print(f"Could not load TETRIS_TV_去背.png: {e}")
     tetris_tv_image = None
 
+chi_tv_pacifier_img = None
+try:
+    chi_tv_pacifier_img = pygame.image.load(get_resource_path(os.path.join("picture", "找Chi_電視_奶嘴_去背.png"))).convert_alpha()
+except Exception as e:
+    print(f"Could not load Chi TV pacifier image: {e}")
+    chi_tv_pacifier_img = None
+
+chi_tv_nopacifier_img = None
+try:
+    chi_tv_nopacifier_img = pygame.image.load(get_resource_path(os.path.join("picture", "找Chi_電視_去背.png"))).convert_alpha()
+except Exception as e:
+    print(f"Could not load Chi TV no-pacifier image: {e}")
+    chi_tv_nopacifier_img = None
+
 tv_1988_no_remote = None
 try:
     tv_1988_no_remote = pygame.image.load(get_resource_path(os.path.join("picture", "1988_黑白電視_去背.png"))).convert_alpha()
@@ -446,11 +487,18 @@ except Exception as e:
     print(f"Could not load 1988_黑白電視_複雜提示_去背.png: {e}")
 
 try:
-    sf2_icon_raw = pygame.image.load(get_resource_path(os.path.join("picture", "SF2.jpg")))
-    sf2_icon = sf2_icon_raw
+    sf2_icon = pygame.image.load(
+        get_resource_path(os.path.join("picture", "快打旋風_遊戲帶_去背.png"))).convert_alpha()
 except Exception as e:
-    print(f"Could not load SF2 icon: {e}")
+    print(f"Could not load 快打旋風_遊戲帶_去背.png: {e}")
     sf2_icon = None
+
+tetris_cart_icon = None
+try:
+    tetris_cart_icon = pygame.image.load(
+        get_resource_path(os.path.join("picture", "俄羅斯方塊_遊戲帶_去背.png"))).convert_alpha()
+except Exception as e:
+    print(f"Could not load 俄羅斯方塊_遊戲帶_去背.png: {e}")
 
 # Scene background images and player sprite
 bg_living = bg_living_orig = bg_bathroom = bg_bedroom = None
@@ -477,6 +525,12 @@ try:
     bg_bathroom = pygame.transform.scale(_raw, _HIRES)
 except Exception as e:
     print(f"Could not load 廁所 bg: {e}")
+bg_bathroom_full = None
+try:
+    _raw = pygame.image.load(get_resource_path(os.path.join("picture", "2026_廁所_浴缸滿水_T.png"))).convert()
+    bg_bathroom_full = pygame.transform.scale(_raw, _HIRES)
+except Exception as e:
+    print(f"Could not load 2026_廁所_浴缸滿水_T.png: {e}")
 try:
     _raw = pygame.image.load(get_resource_path(os.path.join("picture", "2026_房間_T.png"))).convert()
     bg_bedroom = pygame.transform.scale(_raw, _HIRES)
@@ -545,16 +599,17 @@ except Exception as e:
 mirror_full_fog_img = None
 try:
     mirror_full_fog_img = pygame.image.load(
-        get_resource_path(os.path.join("picture", "鏡子_全霧_去背.png"))).convert_alpha()
+        get_resource_path(os.path.join("picture", "鏡子_全霧_B_去背.png"))).convert_alpha()
 except Exception as e:
-    print(f"Could not load 鏡子_全霧_去背.png: {e}")
+    print(f"Could not load 鏡子_全霧_B_去背.png: {e}")
 cab_img_closed = cab_img_l1 = cab_img_l2 = None
-cab_img_l1_empty = cab_img_l2_empty = None
+cab_img_l1_empty = cab_img_l2_empty = cab_img_l2_coin = None
 for _cab_name, _cab_key in [("客廳櫃_去背.png", "closed"),
                               ("客廳櫃_L1_去背.png", "l1"),
                               ("客廳櫃_L2_去背.png", "l2"),
                               ("客廳櫃_L1_空_去背.png", "l1_empty"),
-                              ("客廳櫃_L2_空_去背.png", "l2_empty")]:
+                              ("客廳櫃_L2_空_去背.png", "l2_empty"),
+                              ("客廳櫃_L2_金幣_去背.png", "l2_coin")]:
     try:
         _cimg = pygame.image.load(
             get_resource_path(os.path.join("picture", _cab_name))).convert_alpha()
@@ -563,6 +618,7 @@ for _cab_name, _cab_key in [("客廳櫃_去背.png", "closed"),
         elif _cab_key == "l2":   cab_img_l2 = _cimg
         elif _cab_key == "l1_empty": cab_img_l1_empty = _cimg
         elif _cab_key == "l2_empty": cab_img_l2_empty = _cimg
+        elif _cab_key == "l2_coin": cab_img_l2_coin = _cimg
     except Exception as e:
         print(f"Could not load {_cab_name}: {e}")
 flashlight_img = None
@@ -578,12 +634,47 @@ try:
 except Exception as e:
     print(f"Could not load 遙控器_去背.png: {e}")
 
-iron_cabinet_img = None
+iron_cabinet_locked_img = None
 try:
-    iron_cabinet_img = pygame.image.load(
+    iron_cabinet_locked_img = pygame.image.load(
+        get_resource_path(os.path.join("picture", "2026房間鐵櫃_鎖_去背.png"))).convert_alpha()
+except Exception as e:
+    print(f"Could not load 2026房間鐵櫃_鎖_去背.png: {e}")
+
+iron_cabinet_open_img = None
+try:
+    iron_cabinet_open_img = pygame.image.load(
         get_resource_path(os.path.join("picture", "2026房間鐵櫃_去背.png"))).convert_alpha()
 except Exception as e:
     print(f"Could not load 2026房間鐵櫃_去背.png: {e}")
+
+iron_cabinet_coin_img = None
+try:
+    iron_cabinet_coin_img = pygame.image.load(
+        get_resource_path(os.path.join("picture", "2026房間鐵櫃_金幣_去背.png"))).convert_alpha()
+except Exception as e:
+    print(f"Could not load 2026房間鐵櫃_金幣_去背.png: {e}")
+
+iron_cabinet_scare_img = None
+try:
+    iron_cabinet_scare_img = pygame.image.load(
+        get_resource_path(os.path.join("picture", "1988嚇人鐵櫃.png"))).convert_alpha()
+except Exception as e:
+    print(f"Could not load 1988嚇人鐵櫃.png: {e}")
+
+notebook_img = None
+try:
+    notebook_img = pygame.image.load(
+        get_resource_path(os.path.join("picture", "筆記本_去背.png"))).convert_alpha()
+except Exception as e:
+    print(f"Could not load 筆記本_去背.png: {e}")
+
+outdoor_scene_img = None
+try:
+    outdoor_scene_img = pygame.image.load(
+        get_resource_path(os.path.join("picture", "戶外場景_chi.png"))).convert()
+except Exception as e:
+    print(f"Could not load 戶外場景_chi.png: {e}")
 
 gashapon_img = None
 try:
@@ -591,6 +682,48 @@ try:
         get_resource_path(os.path.join("picture", "扭蛋機_去背.png"))).convert_alpha()
 except Exception as e:
     print(f"Could not load 扭蛋機_去背.png: {e}")
+
+gashapon_prize_images = {}
+for _gp_name in GASHAPON_PRIZES:
+    try:
+        gashapon_prize_images[_gp_name] = pygame.image.load(
+            get_resource_path(os.path.join("picture", _gp_name))).convert_alpha()
+    except Exception as e:
+        print(f"Could not load {_gp_name}: {e}")
+
+chi_baby_img = None
+try:
+    chi_baby_img = pygame.image.load(
+        get_resource_path(os.path.join("picture", "Chi寶寶_去背.png"))).convert_alpha()
+except Exception as e:
+    print(f"Could not load Chi baby image: {e}")
+    chi_baby_img = None
+
+chi_pacifier_icon = None
+try:
+    chi_pacifier_icon = pygame.image.load(
+        get_resource_path(os.path.join("picture", "Chi的奶嘴_去背.png"))).convert_alpha()
+except Exception as e:
+    print(f"Could not load Chi pacifier icon: {e}")
+    chi_pacifier_icon = None
+
+
+chi_baby_img_with_pacifier = None
+try:
+    chi_baby_img_with_pacifier = pygame.image.load(
+        get_resource_path(os.path.join("picture", "Chi寶寶_奶嘴_去背.png"))).convert_alpha()
+except Exception as e:
+    print(f"Could not load Chi baby with pacifier image: {e}")
+    chi_baby_img_with_pacifier = None
+
+coin_img = None
+try:
+    coin_img = pygame.image.load(
+        get_resource_path(os.path.join("picture", "扭蛋硬幣_去背.png"))).convert_alpha()
+except Exception as e:
+    print(f"Could not load coin image: {e}")
+    coin_img = None
+
 try:
     _raw = pygame.image.load(get_resource_path(os.path.join("picture", "1988_房間_T.png"))).convert()
     bg_1988_bedroom = pygame.transform.scale(_raw, VIRTUAL_RES_1080)
@@ -620,6 +753,57 @@ def draw_cartridge_icon(surface, rect, color):
         pygame.draw.rect(surface, (200, 180, 50),
                          (sx, rect.bottom - strip_h - 2, (rect.width - 8) // 6, strip_h))
 
+def draw_cart_icon(surface, rect, img, fallback_color):
+    """Draw a cartridge using its real artwork if loaded, else the procedural icon."""
+    if img:
+        # smoothscale avoids the noisy/wrong-looking colors plain scale() produces
+        # when shrinking a large source image down to a tiny rect like this.
+        surface.blit(pygame.transform.smoothscale(img, (rect.width, rect.height)), (rect.x, rect.y))
+    else:
+        draw_cartridge_icon(surface, rect, fallback_color)
+
+def draw_book_icon(surface, rect, color):
+    """Draw a book spine with shading, a page edge, and decorative title bands."""
+    shadow = tuple(max(0, c - 70) for c in color)
+    highlight = tuple(min(255, c + 60) for c in color)
+    outline = tuple(max(0, c - 100) for c in color)
+    # Spine body
+    pygame.draw.rect(surface, color, rect, border_radius=4)
+    pygame.draw.rect(surface, shadow, (rect.right - 9, rect.y, 9, rect.height), border_radius=4)
+    pygame.draw.rect(surface, highlight, (rect.x, rect.y, 7, rect.height), border_radius=4)
+    pygame.draw.rect(surface, outline, rect, 2, border_radius=4)
+    # Page edge peeking out at the top
+    pygame.draw.rect(surface, (245, 238, 220), (rect.x + 5, rect.y, rect.width - 10, 5))
+    pygame.draw.rect(surface, (200, 190, 165), (rect.x + 5, rect.y, rect.width - 10, 5), 1)
+    # Decorative gold title bands across the spine
+    band_color = (225, 195, 110)
+    for frac in (0.22, 0.5, 0.78):
+        by = rect.y + int(rect.height * frac)
+        band = pygame.Rect(rect.x + 10, by, rect.width - 20, 5)
+        pygame.draw.rect(surface, band_color, band)
+        pygame.draw.rect(surface, tuple(max(0, c - 70) for c in band_color), band, 1)
+
+def draw_bookshelf_bg(surface, rect):
+    """Draw a wood-grain bookshelf frame with a recessed shelf the books stand on."""
+    wood = (101, 60, 30)
+    grain = (118, 73, 38)
+    pygame.draw.rect(surface, wood, rect, border_radius=10)
+    for gy in range(rect.y + 14, rect.bottom - 10, 14):
+        pygame.draw.line(surface, grain, (rect.x + 12, gy), (rect.right - 12, gy), 1)
+    # Recessed cubby where the books sit
+    inner = rect.inflate(-32, -130)
+    inner.center = (rect.centerx, rect.y + 175)
+    pygame.draw.rect(surface, (62, 36, 16), inner, border_radius=6)
+    pygame.draw.rect(surface, (40, 22, 10), inner, 3, border_radius=6)
+    # Shelf board the books stand on
+    shelf_board = pygame.Rect(inner.x, inner.bottom - 4, inner.width, 16)
+    pygame.draw.rect(surface, (130, 82, 40), shelf_board)
+    pygame.draw.rect(surface, (85, 52, 22), shelf_board, 2)
+    pygame.draw.line(surface, (160, 105, 55), (shelf_board.x, shelf_board.y), (shelf_board.right, shelf_board.y), 2)
+    # Outer frame
+    pygame.draw.rect(surface, (55, 28, 10), rect, 5, border_radius=10)
+    return inner
+
 # Scene draw helpers
 # -------------------------------------------------------------------------
 
@@ -644,7 +828,7 @@ def draw_desk_and_calendar(surface):
 
     # Tetris cartridge on desk (any year 8/8)
     if tetris_cart_spawned:
-        draw_cartridge_icon(surface, tetris_cart_rect, (50, 200, 80))
+        draw_cart_icon(surface, tetris_cart_rect, tetris_cart_icon, (50, 200, 80))
 
     # TV on RIGHT side of desk — always shown (dark screen in non-2026, lit in 2026)
     pygame.draw.rect(surface, (28, 28, 28), tv_rect, border_radius=2)
@@ -841,6 +1025,7 @@ def init_tetris():
     global tetris_piece_x, tetris_piece_y, tetris_next_type
     global tetris_lines_cleared, tetris_game_over, tetris_won
     global tetris_fall_time, tetris_fall_speed, tetris_just_exited
+    global tetris_move_dir, tetris_move_timer
     tetris_board = [[None]*TETRIS_W for _ in range(TETRIS_H)]
     tetris_piece_type = random.randint(0, len(TETRIS_SHAPES)-1)
     tetris_next_type = random.randint(0, len(TETRIS_SHAPES)-1)
@@ -853,9 +1038,15 @@ def init_tetris():
     tetris_fall_speed = 350
     tetris_fall_time = pygame.time.get_ticks()
     tetris_just_exited = False
+    tetris_move_dir = 0
+    tetris_move_timer = 0
 
 def draw_tetris_ui(surface):
     """Render the full Tetris game screen."""
+    # Fill the whole screen first — this UI state skips the normal background
+    # redraw, so without this the side panel shows stale pixels from whatever
+    # was on screen before Tetris started, making the progress text unreadable.
+    surface.fill((10, 10, 32))
     C = TETRIS_CELL
     BX = (WINDOW_RES[0] - TETRIS_W * C) // 2 - 80
     BY = (WINDOW_RES[1] - TETRIS_H * C) // 2
@@ -904,7 +1095,7 @@ def draw_tetris_ui(surface):
     surface.blit(title, title.get_rect(center=(PX + 80, PY - 45)))
 
     # Progress
-    surface.blit(sf.render(f"{tetris_lines_cleared}/{TETRIS_LINES_WIN}", True, (200, 200, 255)), (PX, PY+10))
+    surface.blit(sf.render(f"{min(tetris_lines_cleared, TETRIS_LINES_WIN)}/{TETRIS_LINES_WIN}", True, (200, 200, 255)), (PX, PY+10))
     bar_w = 180
     pygame.draw.rect(surface, (50, 50, 50), (PX, PY+45, bar_w, 14))
     prog = min(1.0, tetris_lines_cleared / max(1, TETRIS_LINES_WIN))
@@ -941,9 +1132,11 @@ def draw_tetris_ui(surface):
         surface.blit(ov, (0, 0))
         surface.blit(high_res_big_font.render("YOU WIN!", True, (255, 255, 0)),
                      high_res_big_font.render("YOU WIN!", True, (255, 255, 0)).get_rect(center=(WINDOW_RES[0]//2, WINDOW_RES[1]//2-50)))
-        surface.blit(high_res_inst_font.render("Mystery Cube obtained! ESC to exit.", True, (200, 255, 200)),
-                     high_res_inst_font.render("Mystery Cube obtained! ESC to exit.", True, (200, 255, 200)).get_rect(center=(WINDOW_RES[0]//2, WINDOW_RES[1]//2+20)))
-        draw_mystery_cube_icon(surface, WINDOW_RES[0]//2, WINDOW_RES[1]//2 - 120, 60)
+        surface.blit(high_res_inst_font.render("Got a coin! ESC to exit.", True, (200, 255, 200)),
+                     high_res_inst_font.render("Got a coin! ESC to exit.", True, (200, 255, 200)).get_rect(center=(WINDOW_RES[0]//2, WINDOW_RES[1]//2+20)))
+        if coin_img:
+            _tw_coin = pygame.transform.scale(coin_img, (60, 60))
+            surface.blit(_tw_coin, _tw_coin.get_rect(center=(WINDOW_RES[0]//2, WINDOW_RES[1]//2 - 120)))
 
 def draw_retro_player(surface, x, y):
     """Fat guy with full black hair, glasses, and visible belly."""
@@ -1221,7 +1414,7 @@ def _do_proximity_check():
 
         if tetris_cart_spawned and player_rect.colliderect(tetris_proximity_rect):
             prompt_label = "Cartridge"
-            prompt_label_rect = calendar_rect
+            prompt_label_rect = tetris_cart_rect
         elif player_rect.colliderect(calendar_proximity_rect):
             prompt_label = "Calendar"
             prompt_label_rect = calendar_rect
@@ -1248,6 +1441,15 @@ def _do_proximity_check():
                 if player_rect.colliderect(main_door_rect.inflate(5, 100)):
                     prompt_label = "Front Door"
                     prompt_label_rect = main_door_rect
+
+        # Chi baby interaction check (1994-10-23 specific)
+        if calendar_date == DATE_1994_10_23 and "Chi的奶嘴_去背.png" in inventory and not chi_baby_has_pacifier:
+            chi_baby_rect = pygame.Rect(chi_baby_x - 10, chi_baby_y - 10, 20, 20)
+            chi_baby_proximity = chi_baby_rect.inflate(80, 80)  # 80 pixel proximity range
+            if player_rect.colliderect(chi_baby_proximity):
+                prompt_label = "Give Pacifier"
+                prompt_label_rect = chi_baby_rect
+
     elif current_scene == "bedroom":
         if player_rect.colliderect(bedroom_door_prox):
             prompt_label = "Living Room"
@@ -1261,7 +1463,7 @@ def _do_proximity_check():
         elif player_rect.colliderect(bed_rect.inflate(16, 16)):
             prompt_label = "Bed"
             prompt_label_rect = bed_rect
-        elif calendar_date != DATE_1988 and player_rect.colliderect(iron_cabinet_rect.inflate(16, 16)):
+        elif player_rect.colliderect(iron_cabinet_rect.inflate(16, 16)):
             prompt_label = "Iron Cabinet"
             prompt_label_rect = iron_cabinet_rect
     elif current_scene == "bathroom":
@@ -1309,21 +1511,23 @@ def _draw_label(surface):
 
 
 def _cab_current_img():
-    """Return the cabinet PNG matching current drawer state."""
+    """Return the cabinet PNG matching the currently selected drawer's state."""
     has_flashlight_in_inv = "Flashlight" in inventory
     has_remote_in_inv = "Remote" in inventory
 
-    if cabinet_drawer2_open:
-        if has_remote_in_inv:
-            return cab_img_l2_empty or cab_img_l2 or cab_img_l1 or cab_img_closed
-        else:
-            return cab_img_l2 or cab_img_l1 or cab_img_closed
-    elif cabinet_drawer1_open:
-        if has_flashlight_in_inv:
-            return cab_img_l1_empty or cab_img_l1 or cab_img_closed
-        else:
-            return cab_img_l1 or cab_img_closed
-    return cab_img_closed
+    if cabinet_selection == 0:
+        if cabinet_drawer1_open:
+            return (cab_img_l1_empty if has_flashlight_in_inv else cab_img_l1) or cab_img_closed
+        return cab_img_closed
+    else:
+        if cabinet_drawer2_open:
+            if not has_remote_in_inv:
+                return cab_img_l2 or cab_img_closed
+            elif not cabinet_l2_coin_taken:
+                return cab_img_l2_coin or cab_img_l2_empty or cab_img_closed
+            else:
+                return cab_img_l2_empty or cab_img_closed
+        return cab_img_closed
 
 
 def _check_collision(r):
@@ -1373,11 +1577,28 @@ def _draw_debug_rects(surface):
     pygame.draw.rect(surface, (80, 140, 255), bsr, 2)
     surface.blit(_font.render(f"bounds ({bx0},{bx1},{by0},{by1})", True, (80, 200, 255)),
                  (bsr[0], bsr[1] - 16))
+
+    # Chi Baby boundary (if applicable - green)
+    if current_scene == "living_room" and calendar_date == DATE_1994_10_23:
+        chi_bx0, chi_bx1, chi_by0, chi_by1 = ROOM_BOUNDS.get(current_scene, (40, 268, 75, 195))
+        chi_bsr = (int(chi_bx0 * _SX), int(chi_by0 * _SY),
+                   int((chi_bx1 - chi_bx0) * _SX), int((chi_by1 - chi_by0) * _SY))
+        pygame.draw.rect(surface, (0, 255, 0), chi_bsr, 2)
+        surface.blit(_font.render(f"Chi Baby bounds ({chi_bx0},{chi_bx1},{chi_by0},{chi_by1})", True, (0, 255, 0)),
+                     (chi_bsr[0], chi_bsr[1] + chi_bsr[3] + 2))
+        # Draw Chi Baby current position
+        chi_pos_sr = (int(chi_baby_x * _SX), int(chi_baby_y * _SY))
+        pygame.draw.circle(surface, (0, 255, 100), chi_pos_sr, 5)
+        surface.blit(_font.render(f"Chi({chi_baby_x},{chi_baby_y})", True, (0, 255, 100)),
+                     (chi_pos_sr[0] - 40, chi_pos_sr[1] - 16))
+
     # Legend
     pygame.draw.rect(surface, (255, 0, 0),    (8,  8, 12, 12), 2)
     surface.blit(_font.render("F1 collision", True, (255, 200, 0)), (24,  6))
     pygame.draw.rect(surface, (80, 140, 255), (8, 24, 12, 12), 2)
     surface.blit(_font.render("F1 bounds",    True, (80, 200, 255)), (24, 22))
+    pygame.draw.rect(surface, (0, 255, 0),    (8, 40, 12, 12), 2)
+    surface.blit(_font.render("F1 chi baby",  True, (0, 255, 100)), (24, 38))
 
 
 def _draw_debug_prox(surface):
@@ -1424,34 +1645,57 @@ def draw_dialogue_ui(surface):
         _sw, _sh = _bust_src.get_size()
         _crop_h = int(_sh * 0.65)   # top 65% — includes upper body and thighs
         _crop = _bust_src.subsurface(pygame.Rect(0, 0, _sw, _crop_h))
-        _display_h = _crop_h * 9   # 3x larger than previous (which was _half_h * 3)
-        _display_w = int(_sw * _display_h / _crop_h)
+        _content = _crop.get_bounding_rect()  # trim transparent padding baked into the source art
+        if _content.width > 0 and _content.height > 0:
+            _crop = _crop.subsurface(_content)
+        _cw, _ch = _crop.get_size()
+        _display_h = _ch * 9   # 3x larger than previous (which was _half_h * 3)
+        _display_w = int(_cw * _display_h / _ch)
         _max_h = WINDOW_RES[1] - 60
         if _display_h > _max_h:
             _display_h = _max_h
-            _display_w = int(_sw * _display_h / _crop_h)
+            _display_w = int(_cw * _display_h / _ch)
         if _display_w > WINDOW_RES[0] // 2:
             _display_w = WINDOW_RES[0] // 2
-            _display_h = int(_crop_h * _display_w / _sw)
+            _display_h = int(_ch * _display_w / _cw)
         _bw = _display_w
         _bust = pygame.transform.scale(_crop, (_display_w, _display_h))
         _by = WINDOW_RES[1] - 98 - _display_h
         if _by < 0:
             _by = 0
-        surface.blit(_bust, (WINDOW_RES[0] - _display_w - 10, _by))
+        # Flush against the right edge now that padding is trimmed (closest to edge without exceeding it)
+        surface.blit(_bust, (WINDOW_RES[0] - _display_w, _by))
     _margin = 15
     _box_w = min(400, WINDOW_RES[0] - _bw - _margin * 3)
     if _box_w < 200:
         _box_w = 200
-    _box_h = 165
-    _box_y = WINDOW_RES[1] - 98 - _box_h
     _box_x = WINDOW_RES[0] - _bw - _box_w - _margin
     if _box_x < _margin:
         _box_x = _margin
+
+    # Word-wrap dialogue text so it always stays within the box bounds
+    _avail_w = _box_w - 32
+    _lines = []
+    _cur = ""
+    for _word in dialogue_text.split(" "):
+        _test = (_cur + " " + _word).strip()
+        if cal_day_font.size(_test)[0] <= _avail_w or not _cur:
+            _cur = _test
+        else:
+            _lines.append(_cur)
+            _cur = _word
+    if _cur:
+        _lines.append(_cur)
+    _line_h = cal_day_font.get_linesize()
+    _footer_h = 64  # room for the Yes/No or continue prompt
+    _box_h = max(165, 20 + len(_lines) * _line_h + _footer_h)
+    _box_y = WINDOW_RES[1] - 98 - _box_h
+
     pygame.draw.rect(surface, (20, 20, 35), (_box_x, _box_y, _box_w, _box_h), border_radius=10)
     pygame.draw.rect(surface, (120, 160, 220), (_box_x, _box_y, _box_w, _box_h), 2, border_radius=10)
-    _txt = cal_day_font.render(dialogue_text, True, (220, 220, 255))
-    surface.blit(_txt, (_box_x + 16, _box_y + 20))
+    for _i, _line in enumerate(_lines):
+        _txt = cal_day_font.render(_line, True, (220, 220, 255))
+        surface.blit(_txt, (_box_x + 16, _box_y + 20 + _i * _line_h))
     if dialogue_has_choices:
         for _i, _lbl in enumerate(["Yes", "No"]):
             _col = (255, 220, 60) if _i == dialogue_choice else (160, 160, 160)
@@ -1468,6 +1712,7 @@ def _trigger_action(obj):
     global ui_state, current_scene, player_x, player_y
     global room_lights_on, iron_box_state, tetris_cart_spawned, cabinet_message, _msg_timer
     global dialogue_triggered, fighter_message, bathtub_state, mirror_breath_timer, mirror_fogged_in_ui, mirror_breathed_once
+    global iron_cabinet_scare_start
     dialogue_triggered = True
     if obj == "tv":
         ui_state = "tv"
@@ -1502,11 +1747,19 @@ def _trigger_action(obj):
         player_x = living_door_rect.right + 10
         player_y = living_door_rect.centery - player_size // 2
         dialogue_triggered = False
+    elif obj == "bed":
+        if calendar_date == DATE_2026:
+            ui_state = "notebook"
+        dialogue_triggered = False
     elif obj == "bookshelf":
         ui_state = "bookshelf"
         dialogue_triggered = False
     elif obj == "iron_cabinet":
-        ui_state = "iron_cabinet"
+        if calendar_date == DATE_1988:
+            ui_state = "iron_cabinet_scare"
+            iron_cabinet_scare_start = pygame.time.get_ticks()
+        else:
+            ui_state = "iron_cabinet"
         dialogue_triggered = False
     elif obj == "computer":
         selected_item = inventory[selected_inv_slot] if selected_inv_slot >= 0 and selected_inv_slot < len(inventory) else None
@@ -1547,10 +1800,38 @@ def _trigger_action(obj):
     elif obj == "bathtub":
         ui_state = "bathtub_fill"
         dialogue_triggered = False
+    elif obj == "chi_baby":
+        global chi_baby_has_pacifier, coin_items
+        if "Chi的奶嘴_去背.png" in inventory:
+            inventory.remove("Chi的奶嘴_去背.png")
+            chi_baby_has_pacifier = True
+            dialogue_triggered = False
+            prompt_label = ""
+            # Drop coin
+            coin_data = {
+                'x': chi_baby_x + 15,  # Chi baby side (right)
+                'y': chi_baby_y,       # Chi baby height
+                'vy': -3,              # Initial upward velocity
+                'lifetime': 300,       # Coin existence time (frames)
+                'name': '扭蛋硬幣_去背.png'  # Collectible item name
+            }
+            coin_items.append(coin_data)
 
 
 # Inventory bar helper
 # -------------------------------------------------------------------------
+
+# Maps number-row keys to slot indices: 1-9 -> 0-8, 0 -> 9 (slot 10)
+INV_SLOT_KEYS = {
+    pygame.K_1: 0, pygame.K_2: 1, pygame.K_3: 2, pygame.K_4: 3, pygame.K_5: 4,
+    pygame.K_6: 5, pygame.K_7: 6, pygame.K_8: 7, pygame.K_9: 8, pygame.K_0: 9,
+}
+
+def _toggle_inv_slot(idx):
+    """Toggle selection of an inventory slot (number-key press)."""
+    global selected_inv_slot, last_inv_slot_key
+    selected_inv_slot = idx if last_inv_slot_key != idx else -1
+    last_inv_slot_key = idx if selected_inv_slot == idx else -1
 
 def draw_inventory_bar():
     slot_size = 60
@@ -1581,13 +1862,9 @@ def draw_inventory_bar():
             elif item == "MysteryCube":
                 draw_mystery_cube_icon(screen, sr.centerx, sr.centery, 44)
             elif item == "SF2 Cartridge":
-                if sf2_icon:
-                    icon = pygame.transform.scale(sf2_icon, (slot_size - 8, slot_size - 8))
-                    screen.blit(icon, (sr.x + 4, sr.y + 4))
-                else:
-                    draw_cartridge_icon(screen, sr.inflate(-10, -10), (220, 80, 30))
+                draw_cart_icon(screen, sr.inflate(-10, -10), sf2_icon, (220, 80, 30))
             elif item == "Tetris Cartridge":
-                draw_cartridge_icon(screen, sr.inflate(-10, -10), (50, 200, 80))
+                draw_cart_icon(screen, sr.inflate(-10, -10), tetris_cart_icon, (50, 200, 80))
             elif item == "Remote":
                 if remote_img:
                     icon = pygame.transform.scale(remote_img, (60, 60))
@@ -1595,6 +1872,23 @@ def draw_inventory_bar():
                 else:
                     pygame.draw.rect(screen, (60, 60, 180), sr.inflate(-12, -8))
                     pygame.draw.rect(screen, (100, 100, 220), sr.inflate(-12, -8), 2)
+            elif item in gashapon_prize_images:
+                icon = pygame.transform.scale(gashapon_prize_images[item], (slot_size - 2, slot_size - 8))
+                screen.blit(icon, (sr.x + 1, sr.y + 4))
+            elif item == "Chi的奶嘴_去背.png":
+                if chi_pacifier_icon:
+                    icon = pygame.transform.scale(chi_pacifier_icon, (slot_size - 8, slot_size - 8))
+                    screen.blit(icon, (sr.x + 4, sr.y + 4))
+                else:
+                    pygame.draw.circle(screen, (255, 200, 220), sr.center, 20)
+                    pygame.draw.circle(screen, (200, 150, 180), sr.center, 20, 2)
+            elif item == "扭蛋硬幣_去背.png":
+                if coin_img:
+                    icon = pygame.transform.scale(coin_img, (slot_size - 8, slot_size - 8))
+                    screen.blit(icon, (sr.x + 4, sr.y + 4))
+                else:
+                    pygame.draw.circle(screen, (255, 215, 0), sr.center, 20)
+                    pygame.draw.circle(screen, (218, 165, 32), sr.center, 20, 2)
             elif item in ("Strange Cube 2", "MysteryCube"):
                 draw_mystery_cube_icon(screen, sr.centerx, sr.centery, 44)
             else:
@@ -1602,6 +1896,49 @@ def draw_inventory_bar():
         # Slot number label
         num_label = font.render(str(i + 1), True, (180, 180, 180))
         screen.blit(num_label, num_label.get_rect(centerx=sr.centerx, top=sr.bottom + 3))
+
+
+# Pre-game screens
+# -------------------------------------------------------------------------
+
+def draw_title_screen(surface):
+    surface.fill((10, 10, 25))
+    pygame.draw.rect(surface, (60, 60, 120), (20, 20, WINDOW_RES[0] - 40, WINDOW_RES[1] - 40), 4, border_radius=12)
+
+    title = high_res_big_font.render("RETRO 2D GAME", True, (255, 220, 80))
+    surface.blit(title, title.get_rect(center=(WINDOW_RES[0]//2, WINDOW_RES[1]//2 - 80)))
+
+    subtitle = high_res_inst_font.render("A Time-Traveling Story", True, (180, 200, 255))
+    surface.blit(subtitle, subtitle.get_rect(center=(WINDOW_RES[0]//2, WINDOW_RES[1]//2 - 20)))
+
+    if (pygame.time.get_ticks() // 500) % 2 == 0:
+        prompt = high_res_inst_font.render("Press SPACE to Start", True, (255, 255, 255))
+        surface.blit(prompt, prompt.get_rect(center=(WINDOW_RES[0]//2, WINDOW_RES[1]//2 + 80)))
+
+def draw_instructions_screen(surface):
+    surface.fill((10, 10, 25))
+    pygame.draw.rect(surface, (60, 60, 120), (20, 20, WINDOW_RES[0] - 40, WINDOW_RES[1] - 40), 4, border_radius=12)
+
+    heading = high_res_big_font.render("HOW TO PLAY", True, (255, 220, 80))
+    surface.blit(heading, heading.get_rect(center=(WINDOW_RES[0]//2, 90)))
+
+    controls = [
+        ("Arrow Keys / WASD", "Move around"),
+        ("SPACE", "Interact / Confirm / Select Yes"),
+        ("1 - 9, 0", "Select an item in your inventory"),
+        ("ESC", "Cancel / Close a menu"),
+    ]
+    _ly = 200
+    for key, desc in controls:
+        key_surf = cal_day_font.render(key, True, (255, 220, 100))
+        desc_surf = cal_day_font.render(desc, True, (220, 220, 220))
+        surface.blit(key_surf, (WINDOW_RES[0]//2 - 280, _ly))
+        surface.blit(desc_surf, (WINDOW_RES[0]//2 - 20, _ly))
+        _ly += 56
+
+    if (pygame.time.get_ticks() // 500) % 2 == 0:
+        prompt = high_res_inst_font.render("Press SPACE to Begin", True, (255, 255, 255))
+        surface.blit(prompt, prompt.get_rect(center=(WINDOW_RES[0]//2, WINDOW_RES[1] - 60)))
 
 # Main loop
 # -------------------------------------------------------------------------
@@ -1652,7 +1989,14 @@ while running:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
-            
+
+        elif event.type == pygame.TEXTINPUT:
+            # Handle text input for the iron cabinet password lock
+            if ui_state == "iron_cabinet_password":
+                if len(cabinet_password_input) < len(cabinet_password_target):
+                    cabinet_password_input = cabinet_password_input[:cabinet_password_edit_pos] + event.text.upper() + cabinet_password_input[cabinet_password_edit_pos:]
+                    cabinet_password_edit_pos += 1
+
         elif event.type == pygame.KEYDOWN:
 
             if dialogue_active:
@@ -1678,23 +2022,18 @@ while running:
             if event.key == pygame.K_F2:
                 debug_prox = not debug_prox
 
-            if ui_state == "game":
-                if event.key == pygame.K_1:
-                    selected_inv_slot = 0 if last_inv_slot_key != 0 else -1
-                    last_inv_slot_key = 0 if selected_inv_slot == 0 else -1
-                elif event.key == pygame.K_2:
-                    selected_inv_slot = 1 if last_inv_slot_key != 1 else -1
-                    last_inv_slot_key = 1 if selected_inv_slot == 1 else -1
-                elif event.key == pygame.K_3:
-                    selected_inv_slot = 2 if last_inv_slot_key != 2 else -1
-                    last_inv_slot_key = 2 if selected_inv_slot == 2 else -1
-                elif event.key == pygame.K_4:
-                    selected_inv_slot = 3 if last_inv_slot_key != 3 else -1
-                    last_inv_slot_key = 3 if selected_inv_slot == 3 else -1
-                elif event.key == pygame.K_5:
-                    selected_inv_slot = 4 if last_inv_slot_key != 4 else -1
-                    last_inv_slot_key = 4 if selected_inv_slot == 4 else -1
-                
+            if ui_state == "title":
+                if event.key == pygame.K_SPACE:
+                    ui_state = "instructions"
+
+            elif ui_state == "instructions":
+                if event.key == pygame.K_SPACE:
+                    ui_state = "game"
+
+            elif ui_state == "game":
+                if event.key in INV_SLOT_KEYS:
+                    _toggle_inv_slot(INV_SLOT_KEYS[event.key])
+
                 elif event.key == pygame.K_SPACE:
                     _obj = ""
                     if current_scene == "living_room":
@@ -1722,6 +2061,14 @@ while running:
                             if calendar_date == DATE_2026:
                                 if player_rect.colliderect(main_door_rect.inflate(5, 100)):
                                     _obj = "frontdoor"
+
+                        # Chi baby interaction (1994-10-23 specific)
+                        if calendar_date == DATE_1994_10_23 and "Chi的奶嘴_去背.png" in inventory and not chi_baby_has_pacifier:
+                            chi_baby_rect = pygame.Rect(chi_baby_x - 10, chi_baby_y - 10, 20, 20)
+                            chi_baby_proximity = chi_baby_rect.inflate(80, 80)
+                            if player_rect.colliderect(chi_baby_proximity):
+                                _obj = "chi_baby"
+
                     elif current_scene == "bedroom":
                         if player_rect.colliderect(bedroom_door_prox):
                             _obj = "livingroom"
@@ -1731,7 +2078,7 @@ while running:
                             _obj = "computer"
                         elif player_rect.colliderect(bed_rect.inflate(16, 16)):
                             _obj = "bed"
-                        elif calendar_date != DATE_1988 and player_rect.colliderect(iron_cabinet_rect.inflate(16, 16)):
+                        elif player_rect.colliderect(iron_cabinet_rect.inflate(16, 16)):
                             _obj = "iron_cabinet"
                     elif current_scene == "bathroom":
                         if player_rect.colliderect(bathroom_exit_prox):
@@ -1747,7 +2094,10 @@ while running:
                                 _obj = "ironbox_place"
                             else:
                                 _obj = "pipe"
-                    if _obj and _obj in DIALOGUE_MAP:
+                    if _obj == "iron_cabinet" and iron_cabinet_unlocked:
+                        # Already unlocked — go straight in, no need to re-confirm opening it
+                        _trigger_action(_obj)
+                    elif _obj and _obj in DIALOGUE_MAP and not dialogue_active:
                         dialogue_active = True
                         dialogue_object = _obj
                         dialogue_text, dialogue_has_choices = DIALOGUE_MAP[_obj]
@@ -1756,26 +2106,24 @@ while running:
             elif ui_state == "computer_idle":
                 if event.key == pygame.K_ESCAPE:
                     ui_state = "game"
+                elif event.key in INV_SLOT_KEYS:
+                    _toggle_inv_slot(INV_SLOT_KEYS[event.key])
+                elif event.key == pygame.K_SPACE:
+                    selected_item = inventory[selected_inv_slot] if selected_inv_slot >= 0 and selected_inv_slot < len(inventory) else None
+                    if selected_item == "SF2 Cartridge":
+                        ui_state = "computer"
+                        init_rt_fighter()
+                        fighter_message = ""
+                    elif selected_item == "Tetris Cartridge":
+                        ui_state = "tetris"
+                        init_tetris()
 
             elif ui_state == "computer":
                 # Always allow number key selection and escape
                 if event.key == pygame.K_ESCAPE:
                     ui_state = "game"
-                elif event.key == pygame.K_1:
-                    selected_inv_slot = 0 if last_inv_slot_key != 0 else -1
-                    last_inv_slot_key = 0 if selected_inv_slot == 0 else -1
-                elif event.key == pygame.K_2:
-                    selected_inv_slot = 1 if last_inv_slot_key != 1 else -1
-                    last_inv_slot_key = 1 if selected_inv_slot == 1 else -1
-                elif event.key == pygame.K_3:
-                    selected_inv_slot = 2 if last_inv_slot_key != 2 else -1
-                    last_inv_slot_key = 2 if selected_inv_slot == 2 else -1
-                elif event.key == pygame.K_4:
-                    selected_inv_slot = 3 if last_inv_slot_key != 3 else -1
-                    last_inv_slot_key = 3 if selected_inv_slot == 3 else -1
-                elif event.key == pygame.K_5:
-                    selected_inv_slot = 4 if last_inv_slot_key != 4 else -1
-                    last_inv_slot_key = 4 if selected_inv_slot == 4 else -1
+                elif event.key in INV_SLOT_KEYS:
+                    _toggle_inv_slot(INV_SLOT_KEYS[event.key])
                 # Other keys depend on fighter state
                 elif fighter_state == "fighting":
                     if event.key == pygame.K_SPACE and rt_p1["state"] != "attacking":
@@ -1806,46 +2154,37 @@ while running:
                         init_rt_fighter()
                         
             elif ui_state == "tv":
-                if event.key in (pygame.K_SPACE, pygame.K_ESCAPE):
+                if event.key == pygame.K_SPACE:
+                    if tv_channel == 2:  # Chi pacifier channel
+                        if "Chi的奶嘴_去背.png" not in inventory:
+                            inventory.append("Chi的奶嘴_去背.png")
+                            print(f"[DEBUG] Got pacifier! Inventory now: {inventory}")
+                    else:
+                        ui_state = "game"
+                        tv_channel = 0  # reset channel when closing
+                elif event.key == pygame.K_ESCAPE:
                     ui_state = "game"
                     tv_channel = 0  # reset channel when closing
-                elif event.key in (pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4, pygame.K_5):
+                elif event.key in INV_SLOT_KEYS:
                     # Handle inventory slot selection even in TV UI
-                    if event.key == pygame.K_1:
-                        selected_inv_slot = 0 if last_inv_slot_key != 0 else -1
-                        last_inv_slot_key = 0 if selected_inv_slot == 0 else -1
-                    elif event.key == pygame.K_2:
-                        selected_inv_slot = 1 if last_inv_slot_key != 1 else -1
-                        last_inv_slot_key = 1 if selected_inv_slot == 1 else -1
-                    elif event.key == pygame.K_3:
-                        selected_inv_slot = 2 if last_inv_slot_key != 2 else -1
-                        last_inv_slot_key = 2 if selected_inv_slot == 2 else -1
-                    elif event.key == pygame.K_4:
-                        selected_inv_slot = 3 if last_inv_slot_key != 3 else -1
-                        last_inv_slot_key = 3 if selected_inv_slot == 3 else -1
-                    elif event.key == pygame.K_5:
-                        selected_inv_slot = 4 if last_inv_slot_key != 4 else -1
-                        last_inv_slot_key = 4 if selected_inv_slot == 4 else -1
+                    _toggle_inv_slot(INV_SLOT_KEYS[event.key])
                 elif event.key == pygame.K_UP or event.key == pygame.K_DOWN:
                     # Only allow channel switching if remote is selected
                     selected_remote = selected_inv_slot >= 0 and selected_inv_slot < len(inventory) and inventory[selected_inv_slot] == "Remote"
                     if selected_remote:
                         if event.key == pygame.K_UP:
-                            tv_channel = (tv_channel - 1) % 2
+                            tv_channel = (tv_channel - 1) % 3
                         elif event.key == pygame.K_DOWN:
-                            tv_channel = (tv_channel + 1) % 2
+                            tv_channel = (tv_channel + 1) % 3
 
             elif ui_state == "cabinet":
                 if event.key == pygame.K_ESCAPE:
                     cabinet_item_pending = None
                     ui_state = "game"
                     dialogue_triggered = False
-                elif event.key in (pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4, pygame.K_5):
+                elif event.key in INV_SLOT_KEYS:
                     # Handle inventory slot selection even in cabinet UI
-                    slot_map = {pygame.K_1: 0, pygame.K_2: 1, pygame.K_3: 2, pygame.K_4: 3, pygame.K_5: 4}
-                    slot_idx = slot_map[event.key]
-                    selected_inv_slot = slot_idx if last_inv_slot_key != slot_idx else -1
-                    last_inv_slot_key = slot_idx if selected_inv_slot == slot_idx else -1
+                    _toggle_inv_slot(INV_SLOT_KEYS[event.key])
                 elif event.key == pygame.K_UP:
                     cabinet_selection = 0; cabinet_message = ""; _msg_timer = 0
                 elif event.key == pygame.K_DOWN:
@@ -1856,7 +2195,10 @@ while running:
                         inventory.append(cabinet_item_pending)
                         if cabinet_item_pending == "Flashlight":
                             has_flashlight = True
-                        cabinet_message = f"Got {cabinet_item_pending}!"; _msg_timer = 180
+                        elif cabinet_item_pending == "扭蛋硬幣_去背.png":
+                            cabinet_l2_coin_taken = True
+                        cabinet_message = "Got a coin!" if cabinet_item_pending == "扭蛋硬幣_去背.png" else f"Got {cabinet_item_pending}!"
+                        _msg_timer = 180
                         cabinet_item_pending = None
                     elif cabinet_selection == 0:
                         if not cabinet_drawer1_open:
@@ -1873,20 +2215,25 @@ while running:
                             else:
                                 cabinet_message = "Drawer is empty."; _msg_timer = 180
                     elif cabinet_selection == 1:
-                        # Must select key in inventory to open drawer 2
-                        has_key_selected = selected_inv_slot >= 0 and selected_inv_slot < len(inventory) and inventory[selected_inv_slot] == "Key"
-                        if not has_key:
-                            cabinet_message = "This drawer is locked. Need a key."; _msg_timer = 180
-                        elif not has_key_selected:
-                            cabinet_message = "Need to select the key in inventory!"; _msg_timer = 180
-                        elif not cabinet_drawer2_open:
-                            cabinet_drawer2_open = True
-                            cabinet_item_pending = "Remote"
-                            cabinet_message = "There's a remote inside! SPACE to take it."; _msg_timer = 180
-                        else:
-                            if "Remote" not in inventory and cabinet_drawer2_open:
+                        # Must select key in inventory to open drawer 2 (only needed the first time)
+                        if not cabinet_drawer2_open:
+                            has_key_selected = selected_inv_slot >= 0 and selected_inv_slot < len(inventory) and inventory[selected_inv_slot] == "Key"
+                            if not has_key:
+                                cabinet_message = "This drawer is locked. Need a key."; _msg_timer = 180
+                            elif not has_key_selected:
+                                cabinet_message = "Need to select the key in inventory!"; _msg_timer = 180
+                            else:
+                                cabinet_drawer2_open = True
+                                inventory.remove("Key")
+                                selected_inv_slot = -1
+                                last_inv_slot_key = -1
+                        if cabinet_drawer2_open:
+                            if "Remote" not in inventory:
                                 cabinet_item_pending = "Remote"
-                                cabinet_message = "Remote is here! SPACE to take it."; _msg_timer = 180
+                                cabinet_message = "There's a remote inside! SPACE to take it."; _msg_timer = 180
+                            elif not cabinet_l2_coin_taken:
+                                cabinet_item_pending = "扭蛋硬幣_去背.png"
+                                cabinet_message = "There's a coin inside! SPACE to take it."; _msg_timer = 180
                             else:
                                 cabinet_message = "Drawer is empty."; _msg_timer = 180
 
@@ -1943,12 +2290,9 @@ while running:
                 if event.key == pygame.K_ESCAPE:
                     ui_state = "game"
                     tetris_just_exited = True
-                elif event.key in (pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4, pygame.K_5):
+                elif event.key in INV_SLOT_KEYS:
                     # Handle inventory slot selection in tetris (always allowed)
-                    slot_map = {pygame.K_1: 0, pygame.K_2: 1, pygame.K_3: 2, pygame.K_4: 3, pygame.K_5: 4}
-                    slot_idx = slot_map[event.key]
-                    selected_inv_slot = slot_idx if last_inv_slot_key != slot_idx else -1
-                    last_inv_slot_key = slot_idx if selected_inv_slot == slot_idx else -1
+                    _toggle_inv_slot(INV_SLOT_KEYS[event.key])
                 elif tetris_game_over or tetris_won:
                     if event.key == pygame.K_SPACE:
                         init_tetris()
@@ -1956,13 +2300,22 @@ while running:
                     if event.key == pygame.K_LEFT:
                         if tetris_valid(tetris_board, tetris_piece_type, tetris_piece_rot, tetris_piece_x - 1, tetris_piece_y):
                             tetris_piece_x -= 1
+                        tetris_move_dir = -1
+                        tetris_move_timer = pygame.time.get_ticks() + TETRIS_DAS_DELAY
                     elif event.key == pygame.K_RIGHT:
                         if tetris_valid(tetris_board, tetris_piece_type, tetris_piece_rot, tetris_piece_x + 1, tetris_piece_y):
                             tetris_piece_x += 1
+                        tetris_move_dir = 1
+                        tetris_move_timer = pygame.time.get_ticks() + TETRIS_DAS_DELAY
                     elif event.key == pygame.K_UP:
                         nr = tetris_piece_rot + 1
-                        if tetris_valid(tetris_board, tetris_piece_type, nr, tetris_piece_x, tetris_piece_y):
-                            tetris_piece_rot = nr
+                        # Simple wall kick: nudge sideways if rotating in place would
+                        # push the piece out of bounds (fixes "can't rotate near a wall").
+                        for _kick_dx in (0, 1, -1, 2, -2):
+                            if tetris_valid(tetris_board, tetris_piece_type, nr, tetris_piece_x + _kick_dx, tetris_piece_y):
+                                tetris_piece_rot = nr
+                                tetris_piece_x += _kick_dx
+                                break
                     elif event.key == pygame.K_DOWN:
                         if tetris_valid(tetris_board, tetris_piece_type, tetris_piece_rot, tetris_piece_x, tetris_piece_y + 1):
                             tetris_piece_y += 1
@@ -1975,9 +2328,9 @@ while running:
                         tetris_fall_speed = max(80, 350 - tetris_lines_cleared * 13)
                         if tetris_lines_cleared >= TETRIS_LINES_WIN:
                             tetris_won = True
-                            if not has_mystery_cube:
-                                has_mystery_cube = True
-                                inventory.append("MysteryCube")
+                            if not tetris_coin_given:
+                                tetris_coin_given = True
+                                inventory.append("扭蛋硬幣_去背.png")
                         else:
                             tetris_piece_type = tetris_next_type
                             tetris_next_type = random.randint(0, len(TETRIS_SHAPES)-1)
@@ -1988,73 +2341,103 @@ while running:
                                 tetris_game_over = True
                         tetris_fall_time = pygame.time.get_ticks()
 
+            elif ui_state == "notebook":
+                if event.key == pygame.K_ESCAPE:
+                    ui_state = "game"
+
+            elif ui_state == "outdoor":
+                if event.key == pygame.K_ESCAPE:
+                    ui_state = "game"
+                    outdoor_message_shown = False
+                elif event.key == pygame.K_SPACE:
+                    outdoor_message_shown = True
+
+            elif ui_state == "iron_cabinet_scare":
+                if event.key in (pygame.K_ESCAPE, pygame.K_SPACE):
+                    ui_state = "game"
+
             elif ui_state == "iron_cabinet":
                 if event.key == pygame.K_ESCAPE:
                     ui_state = "game"
-                elif event.key == pygame.K_UP:
+                elif event.key == pygame.K_SPACE and not iron_cabinet_unlocked:
+                    # Start password entry to unlock the cabinet
+                    cabinet_password_input = ""
+                    cabinet_password_edit_pos = 0
+                    cabinet_password_feedback = ""
+                    ui_state = "iron_cabinet_password"
+                    # Reset SDL's text-input composition state — without this, the
+                    # very last keystroke typed can silently fail to fire a TEXTINPUT
+                    # event (a known SDL/IME quirk) unless another key is pressed first.
+                    pygame.key.stop_text_input()
+                    pygame.key.start_text_input()
+                elif event.key == pygame.K_SPACE and iron_cabinet_unlocked and not iron_cabinet_coin_taken:
+                    # Take the coin left inside the cabinet
+                    inventory.append("扭蛋硬幣_去背.png")
+                    iron_cabinet_coin_taken = True
+                    cabinet_message = "Got a coin!"; _msg_timer = 180
+                elif event.key == pygame.K_UP and iron_cabinet_unlocked and iron_cabinet_coin_taken:
                     ui_state = "gashapon"
-                elif event.key in (pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4, pygame.K_5):
+                elif event.key in INV_SLOT_KEYS:
                     # Handle inventory slot selection in iron cabinet
-                    if event.key == pygame.K_1:
-                        selected_inv_slot = 0 if last_inv_slot_key != 0 else -1
-                        last_inv_slot_key = 0 if selected_inv_slot == 0 else -1
-                    elif event.key == pygame.K_2:
-                        selected_inv_slot = 1 if last_inv_slot_key != 1 else -1
-                        last_inv_slot_key = 1 if selected_inv_slot == 1 else -1
-                    elif event.key == pygame.K_3:
-                        selected_inv_slot = 2 if last_inv_slot_key != 2 else -1
-                        last_inv_slot_key = 2 if selected_inv_slot == 2 else -1
-                    elif event.key == pygame.K_4:
-                        selected_inv_slot = 3 if last_inv_slot_key != 3 else -1
-                        last_inv_slot_key = 3 if selected_inv_slot == 3 else -1
-                    elif event.key == pygame.K_5:
-                        selected_inv_slot = 4 if last_inv_slot_key != 4 else -1
-                        last_inv_slot_key = 4 if selected_inv_slot == 4 else -1
+                    _toggle_inv_slot(INV_SLOT_KEYS[event.key])
+
+            elif ui_state == "iron_cabinet_password":
+                if event.key == pygame.K_ESCAPE:
+                    cabinet_password_edit_pos = 0
+                    ui_state = "iron_cabinet"
+                elif event.key == pygame.K_BACKSPACE:
+                    # Delete character before cursor
+                    if cabinet_password_edit_pos > 0:
+                        cabinet_password_input = cabinet_password_input[:cabinet_password_edit_pos-1] + cabinet_password_input[cabinet_password_edit_pos:]
+                        cabinet_password_edit_pos -= 1
+                elif event.key == pygame.K_DELETE:
+                    # Delete character at cursor
+                    if cabinet_password_edit_pos < len(cabinet_password_input):
+                        cabinet_password_input = cabinet_password_input[:cabinet_password_edit_pos] + cabinet_password_input[cabinet_password_edit_pos+1:]
+                elif event.key == pygame.K_LEFT:
+                    cabinet_password_edit_pos = max(0, cabinet_password_edit_pos - 1)
+                elif event.key == pygame.K_RIGHT:
+                    cabinet_password_edit_pos = min(len(cabinet_password_input), cabinet_password_edit_pos + 1)
+                elif event.key == pygame.K_RETURN:
+                    if cabinet_password_input == cabinet_password_target:
+                        iron_cabinet_unlocked = True
+                        cabinet_password_input = ""
+                        cabinet_password_edit_pos = 0
+                        cabinet_message = "Cabinet unlocked!"; _msg_timer = 180
+                        ui_state = "iron_cabinet"
+                    else:
+                        cabinet_password_feedback = "Incorrect! Try again."
+                        cabinet_password_feedback_timer = 120  # 2 seconds
+                        cabinet_password_input = ""
+                        cabinet_password_edit_pos = 0
 
             elif ui_state == "gashapon":
                 if event.key == pygame.K_ESCAPE:
                     ui_state = "iron_cabinet"
+                elif event.key in INV_SLOT_KEYS:
+                    _toggle_inv_slot(INV_SLOT_KEYS[event.key])
                 elif event.key == pygame.K_SPACE:
-                    # Start gashapon prize input
-                    gashapon_prize_input = ""
-                    ui_state = "gashapon_prize"
-
-            elif ui_state == "gashapon_prize":
-                if event.key == pygame.K_ESCAPE:
-                    gashapon_edit_pos = 0
-                    ui_state = "gashapon"
-                elif event.key == pygame.K_BACKSPACE:
-                    # Delete character before cursor
-                    if gashapon_edit_pos > 0:
-                        gashapon_prize_input = gashapon_prize_input[:gashapon_edit_pos-1] + gashapon_prize_input[gashapon_edit_pos:]
-                        gashapon_edit_pos -= 1
-                elif event.key == pygame.K_DELETE:
-                    # Delete character at cursor
-                    if gashapon_edit_pos < len(gashapon_prize_input):
-                        gashapon_prize_input = gashapon_prize_input[:gashapon_edit_pos] + gashapon_prize_input[gashapon_edit_pos+1:]
-                elif event.key == pygame.K_LEFT:
-                    # Move cursor left
-                    gashapon_edit_pos = max(0, gashapon_edit_pos - 1)
-                elif event.key == pygame.K_RIGHT:
-                    # Move cursor right
-                    gashapon_edit_pos = min(len(gashapon_prize_input), gashapon_edit_pos + 1)
-                elif event.key == pygame.K_RETURN:
-                    # Check if input matches target
-                    if gashapon_prize_input == gashapon_target:
-                        # Success - add item to inventory
-                        if gashapon_prize_name not in inventory:
-                            inventory.append(gashapon_prize_name)
-                        gashapon_feedback = "Correct! Got 扭蛋_暫存!"
-                        gashapon_feedback_timer = 180  # 3 seconds
-                        ui_state = "gashapon"
-                        gashapon_prize_input = ""
-                        gashapon_edit_pos = 0
+                    # Insert the selected coin to dispense a random prize (no duplicates)
+                    coin_selected = selected_inv_slot >= 0 and selected_inv_slot < len(inventory) and inventory[selected_inv_slot] == "扭蛋硬幣_去背.png"
+                    if coin_selected:
+                        _remaining_prizes = [p for p in GASHAPON_PRIZES if p not in inventory]
+                        if _remaining_prizes:
+                            inventory.pop(selected_inv_slot)
+                            selected_inv_slot = -1
+                            last_inv_slot_key = -1
+                            gashapon_last_prize = random.choice(_remaining_prizes)
+                            inventory.append(gashapon_last_prize)
+                            gashapon_feedback = "Got it!"
+                            gashapon_feedback_timer = 180
+                        else:
+                            gashapon_feedback = "You already have them all!"
+                            gashapon_feedback_timer = 120
+                    elif "扭蛋硬幣_去背.png" in inventory:
+                        gashapon_feedback = "Select a coin first!"
+                        gashapon_feedback_timer = 120
                     else:
-                        # Wrong answer - clear and show feedback
-                        gashapon_feedback = "Incorrect! Try again."
-                        gashapon_feedback_timer = 120  # 2 seconds
-                        gashapon_prize_input = ""
-                        gashapon_edit_pos = 0
+                        gashapon_feedback = "Need a coin! Insert one to play."
+                        gashapon_feedback_timer = 120
 
             elif ui_state == "bookshelf":
                 if event.key == pygame.K_ESCAPE:
@@ -2080,12 +2463,17 @@ while running:
                 if event.key == pygame.K_ESCAPE:
                     ui_state = "game"
                 elif event.key == pygame.K_SPACE:
-                    cubes = [i for i in inventory if "Cube" in i]
-                    # We can just let SPACE try to insert a cube if they have one not inserted yet
-                    for i in range(4):
-                        if not door_puzzle_state[i] and len(cubes) > i:
-                            door_puzzle_state[i] = True
-                            break
+                    if all(door_puzzle_state):
+                        ui_state = "outdoor"
+                    else:
+                        # Insert one of the 4 gashapon prizes into its matching slot
+                        for i, _prize in enumerate(GASHAPON_PRIZES):
+                            if not door_puzzle_state[i] and _prize in inventory:
+                                inventory.remove(_prize)
+                                door_puzzle_state[i] = True
+                                break
+                        if all(door_puzzle_state):
+                            ui_state = "outdoor"
 
             elif ui_state == "sink":
                 if event.key == pygame.K_ESCAPE or event.key == pygame.K_SPACE:
@@ -2137,13 +2525,17 @@ while running:
                     ui_state = "game"
                     pygame.event.clear(pygame.KEYDOWN)
 
-        elif event.type == pygame.TEXTINPUT:
-            # Handle text input for gashapon prize
-            if ui_state == "gashapon_prize":
-                # Insert character at cursor position
-                if len(gashapon_prize_input) < len(gashapon_target):
-                    gashapon_prize_input = gashapon_prize_input[:gashapon_edit_pos] + event.text.upper() + gashapon_prize_input[gashapon_edit_pos:]
-                    gashapon_edit_pos += 1
+    # Pre-game screens (no world/player to update yet)
+    if ui_state == "title":
+        draw_title_screen(screen)
+        pygame.display.flip()
+        clock.tick(60)
+        continue
+    if ui_state == "instructions":
+        draw_instructions_screen(screen)
+        pygame.display.flip()
+        clock.tick(60)
+        continue
 
     # Player movement
     keys = pygame.key.get_pressed()
@@ -2162,6 +2554,56 @@ while running:
         player_moving = _moved
     elif dialogue_active:
         player_moving = False
+
+    # Chi baby movement (only on 1994-10-23, living_room, and not has pacifier)
+    if current_scene == "living_room" and calendar_date == DATE_1994_10_23 and not chi_baby_has_pacifier:
+        chi_baby_change_dir_timer -= 1
+        if chi_baby_change_dir_timer <= 0:
+            chi_baby_dir_x = random.choice([-1, 0, 1])
+            chi_baby_dir_y = random.choice([-1, 0, 1])
+            chi_baby_change_dir_timer = random.randint(30, 80)
+
+        # Update position
+        chi_baby_x += chi_baby_dir_x * chi_baby_speed
+        chi_baby_y += chi_baby_dir_y * chi_baby_speed
+
+        # Use ROOM_BOUNDS for boundary check (same as player character)
+        MIN_X, MAX_X, MIN_Y, MAX_Y = ROOM_BOUNDS.get(current_scene, (40, 268, 75, 195))
+
+        # X boundary check
+        if chi_baby_x <= MIN_X:
+            chi_baby_x = MIN_X
+            chi_baby_dir_x = 1
+        elif chi_baby_x >= MAX_X:
+            chi_baby_x = MAX_X
+            chi_baby_dir_x = -1
+
+        # Y boundary check
+        if chi_baby_y <= MIN_Y:
+            chi_baby_y = MIN_Y
+            chi_baby_dir_y = 1
+        elif chi_baby_y >= MAX_Y:
+            chi_baby_y = MAX_Y
+            chi_baby_dir_y = -1
+
+    # Recalculate player_rect for coin collision detection (must be done before coin update)
+    player_rect = pygame.Rect(player_x, player_y, player_size, player_size)
+
+    # Update coin items
+    if current_scene == "living_room" and calendar_date == DATE_1994_10_23:
+        for coin in coin_items[:]:
+            coin['y'] += coin['vy']
+            coin['vy'] += 0.2  # Gravity
+            coin['lifetime'] -= 1
+
+            coin_rect = pygame.Rect(coin['x'] - 8, coin['y'] - 8, 16, 16)
+            collected = player_rect.colliderect(coin_rect)
+            expired = coin['lifetime'] <= 0 or coin['y'] >= 190
+
+            # Coin always ends up in inventory, whether caught mid-fall or not
+            if collected or expired:
+                inventory.append(coin['name'])
+                coin_items.remove(coin)
 
     elif ui_state == "computer" and fighter_state == "fighting":
         if rt_p1["state"] != "attacking":
@@ -2259,9 +2701,9 @@ while running:
                 tetris_fall_speed = max(80, 350 - tetris_lines_cleared * 13)
                 if tetris_lines_cleared >= TETRIS_LINES_WIN:
                     tetris_won = True
-                    if not has_mystery_cube:
-                        has_mystery_cube = True
-                        inventory.append("MysteryCube")
+                    if not tetris_coin_given:
+                        tetris_coin_given = True
+                        inventory.append("扭蛋硬幣_去背.png")
                 else:
                     tetris_piece_type = tetris_next_type
                     tetris_next_type = random.randint(0, len(TETRIS_SHAPES)-1)
@@ -2271,6 +2713,18 @@ while running:
                     if not tetris_valid(tetris_board, tetris_piece_type, tetris_piece_rot, tetris_piece_x, tetris_piece_y):
                         tetris_game_over = True
             tetris_fall_time = now
+
+    # Tetris left/right auto-repeat while a direction key is held down (DAS)
+    if ui_state == "tetris" and not tetris_game_over and not tetris_won and tetris_move_dir != 0:
+        _tetris_keys = pygame.key.get_pressed()
+        if tetris_move_dir == -1 and not _tetris_keys[pygame.K_LEFT]:
+            tetris_move_dir = 0
+        elif tetris_move_dir == 1 and not _tetris_keys[pygame.K_RIGHT]:
+            tetris_move_dir = 0
+        elif pygame.time.get_ticks() >= tetris_move_timer:
+            if tetris_valid(tetris_board, tetris_piece_type, tetris_piece_rot, tetris_piece_x + tetris_move_dir, tetris_piece_y):
+                tetris_piece_x += tetris_move_dir
+            tetris_move_timer = pygame.time.get_ticks() + TETRIS_DAS_INTERVAL
 
     # Per-room wall boundary clamp + per-axis collision
     _bx_min, _bx_max, _by_min, _by_max = ROOM_BOUNDS.get(
@@ -2295,10 +2749,12 @@ while running:
     if current_scene != "living_room":
         tetris_just_exited = False
 
-    # Tetris cartridge spawn (Any year, 8/8)
+    # Tetris cartridge spawn (Any year, 8/8 — requires the Remote first)
     if calendar_date.month == 8 and calendar_date.day == 8:
-        if "Tetris Cartridge" not in inventory:
+        if "Tetris Cartridge" not in inventory and "Remote" in inventory:
             tetris_cart_spawned = True
+        else:
+            tetris_cart_spawned = False
     else:
         tetris_cart_spawned = False
         
@@ -2412,6 +2868,8 @@ while running:
             _use_hires_bg = bg_living_orig
     elif current_scene == "bedroom" and bg_bedroom:
         _use_hires_bg = bg_bedroom
+    elif current_scene == "bathroom" and bathtub_state != 0 and bg_bathroom_full:
+        _use_hires_bg = bg_bathroom_full
     elif current_scene == "bathroom" and bg_bathroom:
         _use_hires_bg = bg_bathroom
 
@@ -2474,7 +2932,7 @@ while running:
         if _use_hires_bg:
             # 背景圖含所有家具；只畫動態 overlay
             if tetris_cart_spawned:
-                draw_cartridge_icon(display_surface, tetris_cart_rect, (50, 200, 80))
+                draw_cart_icon(display_surface, tetris_cart_rect, tetris_cart_icon, (50, 200, 80))
             # Show remote control next to TV if selected
             if remote_img and calendar_date == DATE_2026:
                 selected_remote = selected_inv_slot >= 0 and selected_inv_slot < len(inventory) and inventory[selected_inv_slot] == "Remote"
@@ -2659,6 +3117,41 @@ while running:
         scaled_surface.set_colorkey(CHROMA)
     screen.blit(scaled_surface, (0, 0))
 
+    # High-res Chi baby (only on 1994-10-23 in living room)
+    if current_scene == "living_room" and calendar_date == DATE_1994_10_23:
+        display_img = chi_baby_img_with_pacifier if chi_baby_has_pacifier else chi_baby_img
+        if display_img:
+            _SX = WINDOW_RES[0] / VIRTUAL_RES[0]
+            _SY = (WINDOW_RES[1] - 60) / VIRTUAL_RES[1]
+            _baby_scaled_w = int(display_img.get_width() * 0.18)  # Scale down to 18% of original
+            _baby_scaled_h = int(display_img.get_height() * 0.18)
+            _baby_scaled = pygame.transform.scale(display_img, (_baby_scaled_w, _baby_scaled_h))
+
+            # Position: fixed in center if has pacifier, else use chi_baby_x, chi_baby_y
+            # (chi_baby_x/y is the center point, matching the collision rect anchor)
+            if chi_baby_has_pacifier:
+                _baby_screen_x = int(160 * _SX)  # Living room center X
+                _baby_screen_y = int(150 * _SY)  # Living room center Y
+            else:
+                _baby_screen_x = int(chi_baby_x * _SX)
+                _baby_screen_y = int(chi_baby_y * _SY)
+
+            screen.blit(_baby_scaled, (_baby_screen_x - _baby_scaled_w // 2, _baby_screen_y - _baby_scaled_h // 2))
+
+    # Render coin items
+    if current_scene == "living_room" and calendar_date == DATE_1994_10_23 and coin_items:
+        _SX = WINDOW_RES[0] / VIRTUAL_RES[0]
+        _SY = (WINDOW_RES[1] - 60) / VIRTUAL_RES[1]
+
+        for coin in coin_items:
+            if coin_img:
+                _coin_scaled_w = int(coin_img.get_width() * 0.04)
+                _coin_scaled_h = int(coin_img.get_height() * 0.04)
+                _coin_scaled = pygame.transform.scale(coin_img, (_coin_scaled_w, _coin_scaled_h))
+                _coin_screen_x = int(coin['x'] * _SX)
+                _coin_screen_y = int(coin['y'] * _SY)
+                screen.blit(_coin_scaled, (_coin_screen_x, _coin_screen_y))
+
     # High-res player drawn first so wall furniture appears in front
     _is_1988 = (calendar_date == DATE_1988)
     _idle_img = player_img_1988_idle if _is_1988 else player_img_2026_idle
@@ -2714,6 +3207,11 @@ while running:
                 current_tv_img = tv_image
             elif tv_channel == 1 and tetris_tv_image:
                 current_tv_img = tetris_tv_image
+            elif tv_channel == 2:
+                if "Chi的奶嘴_去背.png" not in inventory:
+                    current_tv_img = chi_tv_pacifier_img
+                else:
+                    current_tv_img = chi_tv_nopacifier_img
 
         if current_tv_img:
             _tw = int(current_tv_img.get_width() * 0.3)
@@ -2841,9 +3339,10 @@ while running:
         if blink_on:
             ic = high_res_inst_font.render("INSERT CARTRIDGE", True, (0, 255, 60))
             screen.blit(ic, ic.get_rect(center=(WINDOW_RES[0]//2, WINDOW_RES[1]//2 - 20)))
-        hint_ic = font.render("Select a cartridge (1-5) then press SPACE near computer  |  ESC: close", True, (0, 180, 40))
+        hint_ic = font.render("Select a cartridge (1-9, 0) then SPACE to insert  |  ESC: close", True, (0, 180, 40))
         screen.blit(hint_ic, hint_ic.get_rect(center=(WINDOW_RES[0]//2, WINDOW_RES[1]//2 + 40)))
         pygame.draw.rect(screen, (50, 50, 50), (WINDOW_RES[0]//2 - 30, mon_r.bottom, 60, 20))
+        draw_inventory_bar()
 
     elif ui_state == "computer":
         overlay = pygame.Surface(WINDOW_RES, pygame.SRCALPHA)
@@ -2888,21 +3387,100 @@ while running:
         # Draw inventory bar in computer UI
         draw_inventory_bar()
 
+    elif ui_state == "notebook":
+        overlay = pygame.Surface(WINDOW_RES, pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 185))
+        screen.blit(overlay, (0, 0))
+
+        # Display notebook image
+        if notebook_img:
+            _w = int(notebook_img.get_width() * 0.4)
+            _h = int(notebook_img.get_height() * 0.4)
+            _x = (WINDOW_RES[0] - _w) // 2
+            _y = (WINDOW_RES[1] - _h) // 2
+            screen.blit(pygame.transform.scale(notebook_img, (_w, _h)), (_x, _y))
+
+        inst = high_res_inst_font.render("ESC: Close", True, (220, 220, 220))
+        screen.blit(inst, inst.get_rect(center=(WINDOW_RES[0]//2, WINDOW_RES[1]-130)))
+
+        draw_inventory_bar()
+
+    elif ui_state == "outdoor":
+        # First-person outdoor view — no player sprite, just the scene
+        if outdoor_scene_img:
+            # Scale to cover the window while preserving aspect ratio (no stretching),
+            # then crop the overflow evenly instead of squashing it to fit exactly.
+            _ow, _oh = outdoor_scene_img.get_size()
+            _oscale = max(WINDOW_RES[0] / _ow, WINDOW_RES[1] / _oh)
+            _osw, _osh = int(_ow * _oscale), int(_oh * _oscale)
+            _oscaled = pygame.transform.smoothscale(outdoor_scene_img, (_osw, _osh))
+            screen.blit(_oscaled, ((WINDOW_RES[0] - _osw) // 2, (WINDOW_RES[1] - _osh) // 2))
+        else:
+            screen.fill((120, 170, 220))
+
+        if not outdoor_message_shown:
+            caption = high_res_inst_font.render("You stepped outside. SPACE: ... | ESC: Back inside", True, (255, 255, 255))
+            cap_bg = pygame.Surface((caption.get_width() + 20, caption.get_height() + 12), pygame.SRCALPHA)
+            cap_bg.fill((0, 0, 0, 140))
+            screen.blit(cap_bg, cap_bg.get_rect(center=(WINDOW_RES[0]//2, WINDOW_RES[1] - 50)))
+            screen.blit(caption, caption.get_rect(center=(WINDOW_RES[0]//2, WINDOW_RES[1] - 50)))
+        else:
+            # Birthday message, centered on screen
+            _bm_txt = high_res_big_font.render("HAPPY BIRTHDAY!", True, (255, 220, 100))
+            _bm_box_w = _bm_txt.get_width() + 60
+            _bm_box_h = _bm_txt.get_height() + 40
+            _bm_box_x = (WINDOW_RES[0] - _bm_box_w) // 2
+            _bm_box_y = (WINDOW_RES[1] - _bm_box_h) // 2
+            pygame.draw.rect(screen, (20, 20, 35), (_bm_box_x, _bm_box_y, _bm_box_w, _bm_box_h), border_radius=10)
+            pygame.draw.rect(screen, (120, 160, 220), (_bm_box_x, _bm_box_y, _bm_box_w, _bm_box_h), 2, border_radius=10)
+            screen.blit(_bm_txt, _bm_txt.get_rect(center=(WINDOW_RES[0] // 2, WINDOW_RES[1] // 2)))
+
+    elif ui_state == "iron_cabinet_scare":
+        # 1988 jump scare: the cabinet image snaps open and rapidly zooms toward the player
+        screen.fill((0, 0, 0))
+        _scare_elapsed = pygame.time.get_ticks() - iron_cabinet_scare_start
+        _scare_t = min(1.0, _scare_elapsed / 200)  # fast ~0.2s snap
+        _scare_scale = 0.15 + 1.25 * _scare_t  # grows from 0.15x to 1.4x (overshoots screen)
+        if iron_cabinet_scare_img:
+            _siw, _sih = iron_cabinet_scare_img.get_size()
+            _ssw = max(1, int(WINDOW_RES[0] * _scare_scale))
+            _ssh = max(1, int(_ssw * _sih / _siw))
+            _scare_scaled = pygame.transform.smoothscale(iron_cabinet_scare_img, (_ssw, _ssh))
+            screen.blit(_scare_scaled, (WINDOW_RES[0]//2 - _ssw//2, WINDOW_RES[1]//2 - _ssh//2))
+        if _scare_t >= 1.0:
+            _scare_hint = high_res_inst_font.render("ESC / SPACE to continue", True, (220, 220, 220))
+            screen.blit(_scare_hint, _scare_hint.get_rect(center=(WINDOW_RES[0]//2, WINDOW_RES[1] - 40)))
+
     elif ui_state == "iron_cabinet":
         overlay = pygame.Surface(WINDOW_RES, pygame.SRCALPHA)
         overlay.fill((0, 0, 0, 185))
         screen.blit(overlay, (0, 0))
 
-        # Display iron cabinet image
-        if iron_cabinet_img:
-            _w = int(iron_cabinet_img.get_width() * 0.4)
-            _h = int(iron_cabinet_img.get_height() * 0.4)
+        # Display iron cabinet image (locked / has coin / empty)
+        if not iron_cabinet_unlocked:
+            _ci_img = iron_cabinet_locked_img
+        elif not iron_cabinet_coin_taken:
+            _ci_img = iron_cabinet_coin_img
+        else:
+            _ci_img = iron_cabinet_open_img
+        if _ci_img:
+            _w = int(_ci_img.get_width() * 0.4)
+            _h = int(_ci_img.get_height() * 0.4)
             _x = (WINDOW_RES[0] - _w) // 2
             _y = (WINDOW_RES[1] - _h) // 2
-            screen.blit(pygame.transform.scale(iron_cabinet_img, (_w, _h)), (_x, _y))
+            screen.blit(pygame.transform.scale(_ci_img, (_w, _h)), (_x, _y))
 
-        inst = high_res_inst_font.render("UP: Open Gashapon | ESC: Close", True, (220, 220, 220))
+        if not iron_cabinet_unlocked:
+            inst = high_res_inst_font.render("SPACE: Enter Password | ESC: Close", True, (220, 220, 220))
+        elif not iron_cabinet_coin_taken:
+            inst = high_res_inst_font.render("SPACE: Take Coin | ESC: Close", True, (220, 220, 220))
+        else:
+            inst = high_res_inst_font.render("UP: Open Gashapon | ESC: Close", True, (220, 220, 220))
         screen.blit(inst, inst.get_rect(center=(WINDOW_RES[0]//2, WINDOW_RES[1]-130)))
+
+        if cabinet_message:
+            msg = high_res_inst_font.render(cabinet_message, True, (100, 255, 100))
+            screen.blit(msg, msg.get_rect(center=(WINDOW_RES[0]//2, WINDOW_RES[1]//2 - 200)))
 
         draw_inventory_bar()
 
@@ -2919,17 +3497,31 @@ while running:
             _y = (WINDOW_RES[1] - _h) // 2
             screen.blit(pygame.transform.scale(gashapon_img, (_w, _h)), (_x, _y))
 
-        inst = high_res_inst_font.render("ESC: Back to Cabinet", True, (220, 220, 220))
+        # Show the prize image briefly after a successful coin insert
+        if gashapon_feedback == "Got it!" and gashapon_feedback_timer > 0 and gashapon_last_prize in gashapon_prize_images:
+            _prize_img = gashapon_prize_images[gashapon_last_prize]
+            _pw = int(_prize_img.get_width() * 0.3)
+            _ph = int(_prize_img.get_height() * 0.3)
+            _px = (WINDOW_RES[0] - _pw) // 2
+            _py = (WINDOW_RES[1] - _ph) // 2 - 100
+            screen.blit(pygame.transform.scale(_prize_img, (_pw, _ph)), (_px, _py))
+
+        if gashapon_feedback and gashapon_feedback_timer > 0:
+            feedback_color = (100, 255, 100) if gashapon_feedback == "Got it!" else (255, 180, 80)
+            feedback_surf = high_res_inst_font.render(gashapon_feedback, True, feedback_color)
+            screen.blit(feedback_surf, feedback_surf.get_rect(center=(WINDOW_RES[0]//2, WINDOW_RES[1]//2 + 140)))
+
+        inst = high_res_inst_font.render("SPACE: Insert Coin | ESC: Back to Cabinet", True, (220, 220, 220))
         screen.blit(inst, inst.get_rect(center=(WINDOW_RES[0]//2, WINDOW_RES[1]-130)))
 
         draw_inventory_bar()
 
-    elif ui_state == "gashapon_prize":
+    elif ui_state == "iron_cabinet_password":
         overlay = pygame.Surface(WINDOW_RES, pygame.SRCALPHA)
         overlay.fill((0, 0, 0, 185))
         screen.blit(overlay, (0, 0))
 
-        # Display input boxes for gashapon prize with word grouping
+        # Display input boxes for the cabinet password with word grouping
         box_width = 40
         box_height = 40
         word_spacing_small = 45    # Spacing within words (reduced from 55)
@@ -2951,7 +3543,7 @@ while running:
 
         # Draw input boxes
         apostrophe_pos = None  # Track position for apostrophe visual hint
-        for i in range(len(gashapon_target)):
+        for i in range(len(cabinet_password_target)):
             if i >= len(char_positions):
                 break
             char, box_x = char_positions[i]
@@ -2961,19 +3553,16 @@ while running:
             pygame.draw.rect(screen, (200, 200, 200), (box_x, box_y, box_width, box_height), 2)
 
             # Draw character if input exists at this position
-            if i < len(gashapon_prize_input):
-                input_char = gashapon_prize_input[i]
+            if i < len(cabinet_password_input):
+                input_char = cabinet_password_input[i]
                 char_font = pygame.font.SysFont("arial", 24, bold=True)
                 char_surf = char_font.render(input_char, True, (200, 200, 200))
                 char_rect = char_surf.get_rect(center=(box_x + box_width // 2, box_y + box_height // 2))
                 screen.blit(char_surf, char_rect)
 
             # Highlight cursor position with green border
-            if i == gashapon_edit_pos:
+            if i == cabinet_password_edit_pos:
                 pygame.draw.rect(screen, (0, 255, 0), (box_x, box_y, box_width, box_height), 3)
-            elif i == len(gashapon_prize_input) and gashapon_edit_pos == len(gashapon_prize_input):
-                # Also show yellow highlight when cursor is at end
-                pygame.draw.rect(screen, (255, 255, 0), (box_x, box_y, box_width, box_height), 3)
 
             # Mark position for apostrophe (between T and A in TAIME)
             if i == 2:  # T is at position 2
@@ -2982,18 +3571,17 @@ while running:
         # Draw visual apostrophe hint between T and A
         if apostrophe_pos:
             apostrophe_font = pygame.font.SysFont("arial", 28, bold=True)
-            apostrophe_surf = apostrophe_font.render("'", True, (200, 200, 200))  # Brighter gray for visibility
-            apostrophe_rect = apostrophe_surf.get_rect(center=(apostrophe_pos + 7, start_y + 20))  # Adjusted Y position
+            apostrophe_surf = apostrophe_font.render("'", True, (200, 200, 200))
+            apostrophe_rect = apostrophe_surf.get_rect(center=(apostrophe_pos + 7, start_y + 25))
             screen.blit(apostrophe_surf, apostrophe_rect)
 
         # Display feedback message if available
-        if gashapon_feedback and gashapon_feedback_timer > 0:
-            feedback_color = (100, 255, 100) if "Correct" in gashapon_feedback else (255, 100, 100)
-            feedback_surf = high_res_inst_font.render(gashapon_feedback, True, feedback_color)
+        if cabinet_password_feedback and cabinet_password_feedback_timer > 0:
+            feedback_surf = high_res_inst_font.render(cabinet_password_feedback, True, (255, 100, 100))
             screen.blit(feedback_surf, feedback_surf.get_rect(center=(WINDOW_RES[0]//2, start_y - 50)))
 
         # Instructions (shortened to fit in window)
-        inst = high_res_inst_font.render("Type: JETAIME PLUS QUE TOUT | ENTER: Check | ESC: Cancel | BS: Delete", True, (200, 200, 200))
+        inst = high_res_inst_font.render("Type the password | ENTER: Check | ESC: Cancel | BS: Delete", True, (200, 200, 200))
         screen.blit(inst, inst.get_rect(center=(WINDOW_RES[0]//2, WINDOW_RES[1]-130)))
 
     elif ui_state == "bookshelf":
@@ -3002,26 +3590,26 @@ while running:
         screen.blit(overlay, (0, 0))
         
         b_rect = pygame.Rect(WINDOW_RES[0]//2 - 200, WINDOW_RES[1]//2 - 150, 400, 300)
-        pygame.draw.rect(screen, (90, 50, 20), b_rect, border_radius=10)
-        pygame.draw.rect(screen, (60, 30, 10), b_rect, 5, border_radius=10)
-        
-        colors = {"Red": (200, 50, 50), "Blue": (50, 50, 200), "Green": (50, 200, 50)}
-        
+        _shelf_inner = draw_bookshelf_bg(screen, b_rect)
+        _shelf_top = _shelf_inner.bottom - 4
+
+        colors = {"Red": (190, 55, 50), "Blue": (50, 75, 165), "Green": (55, 140, 70)}
+
         if calendar_date == DATE_1988:
             display_order = ["Blue", "Green", "Red"]
         else:
             display_order = bookshelf_order
 
         for i, b in enumerate(display_order):
-            book_r = pygame.Rect(b_rect.x + 80 + i*90, b_rect.y + 100, 60, 150)
-            pygame.draw.rect(screen, colors[b], book_r)
+            book_r = pygame.Rect(b_rect.x + 80 + i*90, _shelf_top - 150, 60, 150)
+            draw_book_icon(screen, book_r, colors[b])
             if i == bookshelf_selection and calendar_date != DATE_1988:
-                pygame.draw.rect(screen, (255, 255, 0), book_r, 3)
+                pygame.draw.rect(screen, (255, 255, 0), book_r.inflate(6, 6), 3, border_radius=6)
                 
         if bookshelf_unlocked and "SF2 Cartridge" not in inventory:
             # Draw cartridge sitting between books
-            cart_r = pygame.Rect(b_rect.centerx - 24, b_rect.y + 60, 48, 30)
-            draw_cartridge_icon(screen, cart_r, (220, 80, 30))
+            cart_r = pygame.Rect(b_rect.centerx - 48, b_rect.y + 30, 96, 60)
+            draw_cart_icon(screen, cart_r, sf2_icon, (220, 80, 30))
             msg = high_res_inst_font.render("SPACE to take SF2 Cartridge!", True, (255, 220, 0))
         elif bookshelf_unlocked:
             msg = high_res_inst_font.render("SF2 Cartridge taken.", True, (150, 255, 100))
@@ -3029,7 +3617,7 @@ while running:
             msg = high_res_inst_font.render("Books are stuck...", True, (200, 200, 200))
         else:
             msg = high_res_inst_font.render("L/R: Select | U/D: Swap | ESC: Close", True, (200, 200, 200))
-        screen.blit(msg, msg.get_rect(center=(WINDOW_RES[0]//2, WINDOW_RES[1]-100)))
+        screen.blit(msg, msg.get_rect(center=(WINDOW_RES[0]//2, WINDOW_RES[1]-130)))
 
     elif ui_state == "main_door":
         overlay = pygame.Surface(WINDOW_RES, pygame.SRCALPHA)
@@ -3039,17 +3627,22 @@ while running:
         d_rect = pygame.Rect(WINDOW_RES[0]//2 - 200, WINDOW_RES[1]//2 - 200, 400, 400)
         pygame.draw.rect(screen, (100, 50, 50), d_rect, border_radius=10)
         
-        # 4 slots
+        # 4 slots, one per gashapon prize
         for i in range(4):
-            slot_r = pygame.Rect(d_rect.x + 80 + i*60, d_rect.centery, 40, 40)
+            slot_r = pygame.Rect(d_rect.x + 70 + i*65, d_rect.centery, 50, 50)
             pygame.draw.rect(screen, (20, 20, 20), slot_r)
             if door_puzzle_state[i]:
-                pygame.draw.rect(screen, (255, 100, 255), slot_r.inflate(-10, -10))
-                
+                _prize_img = gashapon_prize_images.get(GASHAPON_PRIZES[i])
+                if _prize_img:
+                    icon = pygame.transform.scale(_prize_img, (slot_r.width - 4, slot_r.height - 4))
+                    screen.blit(icon, (slot_r.x + 2, slot_r.y + 2))
+                else:
+                    pygame.draw.rect(screen, (255, 100, 255), slot_r.inflate(-10, -10))
+
         if all(door_puzzle_state):
             msg = high_res_inst_font.render("DOOR OPENED! YOU ESCAPED!", True, (0, 255, 0))
         else:
-            msg = high_res_inst_font.render("SPACE: Insert Cube | ESC: Close", True, (200, 200, 200))
+            msg = high_res_inst_font.render("SPACE: Insert Gashapon | ESC: Close", True, (200, 200, 200))
         screen.blit(msg, msg.get_rect(center=(WINDOW_RES[0]//2, WINDOW_RES[1]-100)))
 
     elif ui_state == "sink":
@@ -3142,6 +3735,16 @@ while running:
         gashapon_feedback_timer -= 1
     else:
         gashapon_feedback = ""
+
+    # Update cabinet password feedback timer
+    if cabinet_password_feedback_timer > 0:
+        cabinet_password_feedback_timer -= 1
+    else:
+        cabinet_password_feedback = ""
+
+    # Dates before 1988/6/22 are shown in black & white
+    if calendar_date < DATE_1988:
+        screen.blit(pygame.transform.grayscale(screen), (0, 0))
 
     pygame.display.flip()
     clock.tick(60)
