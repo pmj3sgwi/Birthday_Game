@@ -4,10 +4,10 @@ from PIL import Image
 from collections import Counter
 
 # 1. 指定你的原始圖片路徑 (就是那張有灰白格子的圖)
-input_path = r'C:\Users\YACHI\Documents\Antigravity\Game\picture\鑰匙.png'
+input_path = r'C:\Users\YACHI\Documents\Antigravity\Game\picture\1988_黑白電視_複雜提示_01.png'
 
 # 2. 指定去背後的新檔案名稱
-output_path = r'C:\Users\YACHI\Documents\Antigravity\Game\picture\鑰匙_去背.png'
+output_path = r'C:\Users\YACHI\Documents\Antigravity\Game\picture\1988_黑白電視_複雜提示_01_去背.png'
 
 # 與背景色的歐式距離門檻：低於此值視為背景。
 # 太大會連同畫面內較深/較淺的陰影一起去除，太小則背景邊緣會留下殘留色。

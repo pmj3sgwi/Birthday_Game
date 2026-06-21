@@ -482,9 +482,9 @@ except Exception as e:
 
 tv_1988_with_remote = None
 try:
-    tv_1988_with_remote = pygame.image.load(get_resource_path(os.path.join("picture", "1988_黑白電視_複雜提示_去背.png"))).convert_alpha()
+    tv_1988_with_remote = pygame.image.load(get_resource_path(os.path.join("picture", "1988_黑白電視_複雜提示_01_去背.png"))).convert_alpha()
 except Exception as e:
-    print(f"Could not load 1988_黑白電視_複雜提示_去背.png: {e}")
+    print(f"Could not load 1988_黑白電視_複雜提示_01_去背.png: {e}")
 
 try:
     sf2_icon = pygame.image.load(
@@ -740,6 +740,25 @@ try:
 except Exception as e:
     print(f"Could not load 1988_房間_T.png: {e}")
 
+# Pre-scaled inventory-bar icons — draw_inventory_bar() runs every frame for most
+# UI screens, and used to re-run scale()/smoothscale() on these source images
+# (some quite large) for every filled slot, every frame. Scaling once here and
+# just blitting the cached result is the fix for the slowdown that got worse
+# the more items were sitting in the inventory.
+inv_icon_flashlight = pygame.transform.scale(flashlight_img, (60, 60)) if flashlight_img else None
+inv_icon_key = pygame.transform.smoothscale(key_img, (70, 52)) if key_img else None
+inv_icon_remote = pygame.transform.scale(remote_img, (60, 60)) if remote_img else None
+inv_icon_pacifier = pygame.transform.smoothscale(chi_pacifier_icon, (70, 52)) if chi_pacifier_icon else None
+inv_icon_coin = pygame.transform.smoothscale(coin_img, (70, 52)) if coin_img else None
+inv_icon_gashapon_prizes = {
+    _gp_name: pygame.transform.smoothscale(_gp_img, (70, 52))
+    for _gp_name, _gp_img in gashapon_prize_images.items()
+}
+door_icon_gashapon_prizes = {
+    _gp_name: pygame.transform.smoothscale(_gp_img, (94, 76))
+    for _gp_name, _gp_img in gashapon_prize_images.items()
+}
+
 clock = pygame.time.Clock()
 
 # Pre-allocated surfaces for 1988 dark scene (avoids per-frame 8MB+ allocations)
@@ -763,12 +782,21 @@ def draw_cartridge_icon(surface, rect, color):
         pygame.draw.rect(surface, (200, 180, 50),
                          (sx, rect.bottom - strip_h - 2, (rect.width - 8) // 6, strip_h))
 
+_cart_icon_cache = {}  # (image id, w, h) -> pre-scaled Surface, so repeated draws
+                       # (e.g. every frame in the inventory bar) don't re-run
+                       # smoothscale on a large source image each time.
+
 def draw_cart_icon(surface, rect, img, fallback_color):
     """Draw a cartridge using its real artwork if loaded, else the procedural icon."""
     if img:
-        # smoothscale avoids the noisy/wrong-looking colors plain scale() produces
-        # when shrinking a large source image down to a tiny rect like this.
-        surface.blit(pygame.transform.smoothscale(img, (rect.width, rect.height)), (rect.x, rect.y))
+        cache_key = (id(img), rect.width, rect.height)
+        scaled = _cart_icon_cache.get(cache_key)
+        if scaled is None:
+            # smoothscale avoids the noisy/wrong-looking colors plain scale() produces
+            # when shrinking a large source image down to a tiny rect like this.
+            scaled = pygame.transform.smoothscale(img, (rect.width, rect.height))
+            _cart_icon_cache[cache_key] = scaled
+        surface.blit(scaled, (rect.x, rect.y))
     else:
         draw_cartridge_icon(surface, rect, fallback_color)
 
@@ -1889,15 +1917,13 @@ def draw_inventory_bar():
         if i < len(inventory):
             item = inventory[i]
             if item == "Flashlight":
-                if flashlight_img:
-                    icon = pygame.transform.scale(flashlight_img, (60, 60))
-                    screen.blit(icon, (sr.centerx - 30, sr.centery - 30))
+                if inv_icon_flashlight:
+                    screen.blit(inv_icon_flashlight, (sr.centerx - 30, sr.centery - 30))
                 else:
                     draw_flashlight_icon(screen, sr.centerx, sr.centery, 50)
             elif item == "Key":
-                if key_img:
-                    icon = pygame.transform.smoothscale(key_img, (slot_size + 10, slot_size - 8))
-                    screen.blit(icon, (sr.x - 5, sr.y + 4))
+                if inv_icon_key:
+                    screen.blit(inv_icon_key, (sr.x - 5, sr.y + 4))
                 else:
                     draw_key_icon(screen, sr.centerx, sr.centery, 50)
             elif item == "MysteryCube":
@@ -1907,26 +1933,22 @@ def draw_inventory_bar():
             elif item == "Tetris Cartridge":
                 draw_cart_icon(screen, sr.inflate(-10, -10), tetris_cart_icon, (50, 200, 80))
             elif item == "Remote":
-                if remote_img:
-                    icon = pygame.transform.scale(remote_img, (60, 60))
-                    screen.blit(icon, (sr.centerx - 30, sr.centery - 30))
+                if inv_icon_remote:
+                    screen.blit(inv_icon_remote, (sr.centerx - 30, sr.centery - 30))
                 else:
                     pygame.draw.rect(screen, (60, 60, 180), sr.inflate(-12, -8))
                     pygame.draw.rect(screen, (100, 100, 220), sr.inflate(-12, -8), 2)
-            elif item in gashapon_prize_images:
-                icon = pygame.transform.smoothscale(gashapon_prize_images[item], (slot_size + 10, slot_size - 8))
-                screen.blit(icon, (sr.x - 5, sr.y + 4))
+            elif item in inv_icon_gashapon_prizes:
+                screen.blit(inv_icon_gashapon_prizes[item], (sr.x - 5, sr.y + 4))
             elif item == "Chi的奶嘴_去背.png":
-                if chi_pacifier_icon:
-                    icon = pygame.transform.smoothscale(chi_pacifier_icon, (slot_size + 10, slot_size - 8))
-                    screen.blit(icon, (sr.x - 5, sr.y + 4))
+                if inv_icon_pacifier:
+                    screen.blit(inv_icon_pacifier, (sr.x - 5, sr.y + 4))
                 else:
                     pygame.draw.circle(screen, (255, 200, 220), sr.center, 20)
                     pygame.draw.circle(screen, (200, 150, 180), sr.center, 20, 2)
             elif item == "扭蛋硬幣_去背.png":
-                if coin_img:
-                    icon = pygame.transform.smoothscale(coin_img, (slot_size + 10, slot_size - 8))
-                    screen.blit(icon, (sr.x - 5, sr.y + 4))
+                if inv_icon_coin:
+                    screen.blit(inv_icon_coin, (sr.x - 5, sr.y + 4))
                 else:
                     pygame.draw.circle(screen, (255, 215, 0), sr.center, 20)
                     pygame.draw.circle(screen, (218, 165, 32), sr.center, 20, 2)
@@ -2142,6 +2164,9 @@ while running:
                         dialogue_active = True
                         dialogue_object = _obj
                         dialogue_text, dialogue_has_choices = DIALOGUE_MAP[_obj]
+                        if _obj == "bookshelf" and calendar_date == DATE_1988:
+                            # In 1988 the books are already in the correct order, not scrambled
+                            dialogue_text = "These books look carefully arranged..."
                         dialogue_choice = 0
                         
             elif ui_state == "computer_idle":
@@ -2507,6 +2532,9 @@ while running:
                     ui_state = "game"
                 elif event.key == pygame.K_SPACE:
                     if all(door_puzzle_state):
+                        # All 4 prizes already placed — this press is the
+                        # separate confirm to actually open the door, so the
+                        # player gets a beat to see "DOOR OPENED!" first.
                         ui_state = "outdoor"
                     else:
                         # Insert one of the 4 gashapon prizes into its matching slot
@@ -2515,8 +2543,6 @@ while running:
                                 inventory.remove(_prize)
                                 door_puzzle_state[i] = True
                                 break
-                        if all(door_puzzle_state):
-                            ui_state = "outdoor"
 
             elif ui_state == "sink":
                 if event.key == pygame.K_ESCAPE or event.key == pygame.K_SPACE:
@@ -2886,8 +2912,12 @@ while running:
                 current_tv_img = tv_1988_no_remote
 
             if current_tv_img:
-                _tw = int(current_tv_img.get_width() * 0.3)
-                _th = int(current_tv_img.get_height() * 0.3)
+                # tv_1988_with_remote's artwork renders a bit larger than
+                # tv_1988_no_remote at the same scale, so it gets a smaller
+                # factor to keep the TV the same size when switching between them.
+                _tv_scale = 0.27 if current_tv_img is tv_1988_with_remote else 0.3
+                _tw = int(current_tv_img.get_width() * _tv_scale)
+                _th = int(current_tv_img.get_height() * _tv_scale)
                 _tx = (WINDOW_RES[0] - _tw) // 2
                 _ty = (WINDOW_RES[1] - _th) // 2
                 screen.blit(pygame.transform.scale(current_tv_img, (_tw, _th)), (_tx, _ty))
@@ -2902,7 +2932,7 @@ while running:
             if selected_remote:
                 inst = high_res_inst_font.render("Up/Down: Change Channel | SPACE/ESC: Close", True, (200, 200, 200))
             else:
-                inst = high_res_inst_font.render("SPACE or ESC to close  (選擇遙控器可轉台)", True, (200, 200, 200))
+                inst = high_res_inst_font.render("SPACE or ESC to close  (Select Remote to change channel)", True, (200, 200, 200))
             screen.blit(inst, inst.get_rect(center=(WINDOW_RES[0]//2, WINDOW_RES[1]-130)))
 
         pygame.display.flip()
@@ -3169,27 +3199,6 @@ while running:
         scaled_surface.set_colorkey(CHROMA)
     screen.blit(scaled_surface, (0, 0))
 
-    # High-res Chi baby (only on 1994-10-23 in living room)
-    if current_scene == "living_room" and calendar_date == DATE_1994_10_23:
-        display_img = chi_baby_img_with_pacifier if chi_baby_has_pacifier else chi_baby_img
-        if display_img:
-            _SX = WINDOW_RES[0] / VIRTUAL_RES[0]
-            _SY = (WINDOW_RES[1] - 60) / VIRTUAL_RES[1]
-            _baby_scaled_w = int(display_img.get_width() * 0.18)  # Scale down to 18% of original
-            _baby_scaled_h = int(display_img.get_height() * 0.18)
-            _baby_scaled = pygame.transform.scale(display_img, (_baby_scaled_w, _baby_scaled_h))
-
-            # Position: fixed in center if has pacifier, else use chi_baby_x, chi_baby_y
-            # (chi_baby_x/y is the center point, matching the collision rect anchor)
-            if chi_baby_has_pacifier:
-                _baby_screen_x = int(160 * _SX)  # Living room center X
-                _baby_screen_y = int(150 * _SY)  # Living room center Y
-            else:
-                _baby_screen_x = int(chi_baby_x * _SX)
-                _baby_screen_y = int(chi_baby_y * _SY)
-
-            screen.blit(_baby_scaled, (_baby_screen_x - _baby_scaled_w // 2, _baby_screen_y - _baby_scaled_h // 2))
-
     # Render coin items
     if current_scene == "living_room" and calendar_date == DATE_1994_10_23 and coin_items:
         _SX = WINDOW_RES[0] / VIRTUAL_RES[0]
@@ -3225,6 +3234,29 @@ while running:
         screen.blit(_psprite, (_cx - _iw // 2, _bot - _ih))
     else:
         draw_retro_player_hires(screen, player_x, player_y)
+
+    # High-res Chi baby (only on 1994-10-23 in living room) — drawn after the
+    # player so the baby always renders on top instead of the player walking
+    # over it.
+    if current_scene == "living_room" and calendar_date == DATE_1994_10_23:
+        display_img = chi_baby_img_with_pacifier if chi_baby_has_pacifier else chi_baby_img
+        if display_img:
+            _SX = WINDOW_RES[0] / VIRTUAL_RES[0]
+            _SY = (WINDOW_RES[1] - 60) / VIRTUAL_RES[1]
+            _baby_scaled_w = int(display_img.get_width() * 0.18)  # Scale down to 18% of original
+            _baby_scaled_h = int(display_img.get_height() * 0.18)
+            _baby_scaled = pygame.transform.scale(display_img, (_baby_scaled_w, _baby_scaled_h))
+
+            # Position: fixed in center if has pacifier, else use chi_baby_x, chi_baby_y
+            # (chi_baby_x/y is the center point, matching the collision rect anchor)
+            if chi_baby_has_pacifier:
+                _baby_screen_x = int(160 * _SX)  # Living room center X
+                _baby_screen_y = int(150 * _SY)  # Living room center Y
+            else:
+                _baby_screen_x = int(chi_baby_x * _SX)
+                _baby_screen_y = int(chi_baby_y * _SY)
+
+            screen.blit(_baby_scaled, (_baby_screen_x - _baby_scaled_w // 2, _baby_screen_y - _baby_scaled_h // 2))
 
     # High-res sofa (living room only, fallback only when no hires bg)
     if current_scene == "living_room" and not _use_hires_bg and calendar_date == DATE_2026:
@@ -3266,8 +3298,9 @@ while running:
                     current_tv_img = chi_tv_nopacifier_img
 
         if current_tv_img:
-            _tw = int(current_tv_img.get_width() * 0.3)
-            _th = int(current_tv_img.get_height() * 0.3)
+            _tv_scale = 0.27 if current_tv_img is tv_1988_with_remote else 0.3
+            _tw = int(current_tv_img.get_width() * _tv_scale)
+            _th = int(current_tv_img.get_height() * _tv_scale)
             _tx = (WINDOW_RES[0] - _tw) // 2
             _ty = (WINDOW_RES[1] - _th) // 2
             screen.blit(pygame.transform.scale(current_tv_img, (_tw, _th)), (_tx, _ty))
@@ -3295,7 +3328,7 @@ while running:
         if selected_remote:
             inst = high_res_inst_font.render("Up/Down: Change Channel | SPACE/ESC: Close", True, (200, 200, 200))
         else:
-            inst = high_res_inst_font.render("SPACE or ESC to close  (選擇遙控器可轉台)", True, (200, 200, 200))
+            inst = high_res_inst_font.render("SPACE or ESC to close  (Select Remote to change channel)", True, (200, 200, 200))
         screen.blit(inst, inst.get_rect(center=(WINDOW_RES[0]//2, WINDOW_RES[1]-130)))
 
     elif ui_state == "bathtub_fill":
@@ -3707,10 +3740,9 @@ while running:
             slot_r = pygame.Rect(d_rect.x + 30 + i*90, d_rect.centery - 40, 80, 80)
             pygame.draw.rect(screen, (20, 20, 20), slot_r)
             if door_puzzle_state[i]:
-                _prize_img = gashapon_prize_images.get(GASHAPON_PRIZES[i])
-                if _prize_img:
-                    icon = pygame.transform.smoothscale(_prize_img, (slot_r.width + 14, slot_r.height - 4))
-                    screen.blit(icon, (slot_r.x - 7, slot_r.y + 2))
+                _prize_icon = door_icon_gashapon_prizes.get(GASHAPON_PRIZES[i])
+                if _prize_icon:
+                    screen.blit(_prize_icon, (slot_r.x - 7, slot_r.y + 2))
                 else:
                     pygame.draw.rect(screen, (255, 100, 255), slot_r.inflate(-10, -10))
 
