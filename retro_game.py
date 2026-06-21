@@ -440,7 +440,7 @@ rt_p2 = {}
 def init_rt_fighter():
     global rt_p1, rt_p2, fighter_state, fighter_message
     rt_p1 = {"x": 200, "y": 470, "vy": 0, "hp": 100, "state": "idle", "dir": 1, "atk_timer": 0, "color": (50, 100, 255)}
-    rt_p2 = {"x": VIRTUAL_RES_1080[0]-200, "y": 470, "vy": 0, "hp": 100, "state": "idle", "dir": -1, "atk_timer": 0, "color": (255, 100, 50)}
+    rt_p2 = {"x": WINDOW_RES[0]-200, "y": 470, "vy": 0, "hp": 100, "state": "idle", "dir": -1, "atk_timer": 0, "color": (255, 100, 50)}
     fighter_state = "fighting"
     fighter_message = "P1: Arrows+SPACE Attack | CPU: Zangief"
 
@@ -622,11 +622,21 @@ for _cab_name, _cab_key in [("客廳櫃_去背.png", "closed"),
     except Exception as e:
         print(f"Could not load {_cab_name}: {e}")
 flashlight_img = None
+flashlight_icon_img = None  # pre-rotated (90° clockwise) + 5x enlarged, for the HUD icon
 try:
     flashlight_img = pygame.image.load(
         get_resource_path(os.path.join("picture", "手電筒_去背.png"))).convert_alpha()
+    _fl_base = 60 * 5
+    flashlight_icon_img = pygame.transform.smoothscale(
+        pygame.transform.rotate(flashlight_img, -90), (_fl_base, _fl_base))
 except Exception as e:
     print(f"Could not load 手電筒_去背.png: {e}")
+key_img = None
+try:
+    key_img = pygame.image.load(
+        get_resource_path(os.path.join("picture", "鑰匙_去背.png"))).convert_alpha()
+except Exception as e:
+    print(f"Could not load 鑰匙_去背.png: {e}")
 remote_img = None
 try:
     remote_img = pygame.image.load(
@@ -1257,47 +1267,72 @@ def draw_retro_player_hires(surface, vx, vy):
     # Mouth (smile)
     pygame.draw.rect(surface, (180, 100, 80), (cx - 6, cy - 4, 12, 2))
 
-def draw_fighter(surface, center_x, center_y, is_player, action, hp):
-    color = (50, 150, 255) if is_player else (255, 100, 50)
-    if hp <= 0:
-        color = (100, 100, 100)
-    
-    eye_dir = 1 if is_player else -1
+def draw_fighter(surface, center_x, center_y, direction, action, hp):
+    """Draw Player 1: a chubby otaku fighter — round belly, glasses, black hair.
+    Matches the overworld player's look (see draw_retro_player). Faces `direction`."""
+    skin   = (255, 200, 150) if hp > 0 else (150, 150, 150)
+    shirt  = (80, 120, 200)  if hp > 0 else (95, 95, 105)
+    shirt_dk = (60, 95, 170) if hp > 0 else (75, 75, 85)
+    pants  = (35, 45, 100)   if hp > 0 else (60, 60, 70)
+    hair   = (22, 15, 6)
+    eye_dir = direction
+
+    # Smooth triangular bounce while idle/walking so motion reads as continuous
+    bounce = 0
+    if action in ("idle", "moving"):
+        period = 140 if action == "moving" else 380
+        amp = 3 if action == "moving" else 1.5
+        phase = (pygame.time.get_ticks() % period) / period
+        bounce = -round(amp * (1 - abs(phase * 2 - 1)))
+
+    cy = center_y + bounce
+    lean = 7 if action == "moving" else (12 if action == "attacking" else 0)
+    hx = center_x + eye_dir * lean  # torso/head lean toward facing direction
+
+    # Legs (dark jeans), wider stride while walking
+    spread = 9 if action == "moving" else 6
+    pygame.draw.rect(surface, pants, (center_x - spread - 6, cy + 24, 13, 24), border_radius=4)
+    pygame.draw.rect(surface, pants, (center_x + spread - 7, cy + 24, 13, 24), border_radius=4)
+
+    # Round chubby torso + belly peeking out under the shirt
+    pygame.draw.ellipse(surface, shirt, (hx - 27, cy - 38, 54, 64))
+    pygame.draw.ellipse(surface, shirt_dk, (hx - 27, cy - 38, 54, 64), 2)
+    pygame.draw.ellipse(surface, skin, (hx - 16, cy - 4, 32, 18))
+
+    # Arms
+    if action == "attacking":
+        pygame.draw.rect(surface, shirt, (hx - 24, cy - 26, 14, 32), border_radius=6)
+        pygame.draw.rect(surface, shirt, (hx - 6, cy - 22, 58 * eye_dir, 17), border_radius=7)
+        pygame.draw.circle(surface, skin, (hx + 52 * eye_dir, cy - 14), 9)
+    elif action == "jumping":
+        pygame.draw.ellipse(surface, shirt, (hx - 34, cy - 30, 15, 30))
+        pygame.draw.ellipse(surface, shirt, (hx + 19, cy - 30, 15, 30))
+        pygame.draw.circle(surface, skin, (hx - 30, cy - 4), 6)
+        pygame.draw.circle(surface, skin, (hx + 30, cy - 4), 6)
+    else:
+        pygame.draw.ellipse(surface, shirt, (hx - 33, cy - 22, 14, 32))
+        pygame.draw.ellipse(surface, shirt, (hx + 19, cy - 22, 14, 32))
+        pygame.draw.circle(surface, skin, (hx - 29, cy + 7), 6)
+        pygame.draw.circle(surface, skin, (hx + 29, cy + 7), 6)
+
+    # Head: round face, full black hair, thick glasses
+    head_y = cy - (50 if action == "jumping" else 58)
+    pygame.draw.ellipse(surface, skin, (hx - 17, head_y - 16, 34, 30))
+    pygame.draw.ellipse(surface, hair, (hx - 18, head_y - 21, 36, 18))
+    pygame.draw.rect(surface, hair, (hx - 18, head_y - 12, 7, 16))
+    pygame.draw.rect(surface, hair, (hx + 11, head_y - 12, 7, 16))
+
+    gx = hx + eye_dir * 2
+    for gd in (-1, 1):
+        lens = pygame.Rect(gx + gd * 13 - 5, head_y - 5, 11, 9)
+        pygame.draw.rect(surface, (210, 230, 245), lens, border_radius=2)
+        pygame.draw.rect(surface, (25, 25, 25), lens, 2, border_radius=2)
+        pygame.draw.circle(surface, (0, 0, 0), (lens.centerx + eye_dir, lens.centery), 2)
+    pygame.draw.line(surface, (25, 25, 25), (gx - 3, head_y - 1), (gx + 3, head_y - 1), 2)
+
     if action == "hurt":
-        eye_dir *= -1
-    
-    body_rect = pygame.Rect(center_x - 20, center_y - 40, 40, 80)
-    
-    if action == "idle":
-        pygame.draw.rect(surface, color, body_rect, border_radius=5)
-        pygame.draw.circle(surface, (255, 150, 150), (center_x, center_y - 60), 20)
-        pygame.draw.circle(surface, (0, 0, 0), (center_x + eye_dir * 8, center_y - 65), 4)
-        pygame.draw.rect(surface, color, (center_x - 30, center_y - 40, 12, 40))
-        pygame.draw.rect(surface, color, (center_x + 18, center_y - 40, 12, 40))
-    
-    elif action == "punch":
-        pygame.draw.rect(surface, color, body_rect, border_radius=5)
-        pygame.draw.circle(surface, (255, 150, 150), (center_x + eye_dir * 10, center_y - 60), 20)
-        pygame.draw.circle(surface, (0, 0, 0), (center_x + eye_dir * 18, center_y - 65), 4)
-        pygame.draw.rect(surface, color, (center_x - 10, center_y - 30, 50 * eye_dir, 15))
-        pygame.draw.rect(surface, color, (center_x - 15, center_y - 40, 12, 40))
-        
-    elif action == "kick":
-        pygame.draw.rect(surface, color, (center_x - 15, center_y - 40, 30, 80), border_radius=5)
-        pygame.draw.circle(surface, (255, 150, 150), (center_x, center_y - 60), 20)
-        pygame.draw.circle(surface, (0, 0, 0), (center_x + eye_dir * 8, center_y - 65), 4)
-        pygame.draw.rect(surface, color, (center_x - 15, center_y + 10, 40 * eye_dir, 15))
-    
-    elif action == "block":
-        pygame.draw.rect(surface, color, body_rect, border_radius=5)
-        pygame.draw.circle(surface, (255, 150, 150), (center_x - eye_dir * 5, center_y - 55), 20)
-        pygame.draw.circle(surface, (0, 0, 0), (center_x, center_y - 60), 4)
-        pygame.draw.rect(surface, color, (center_x + eye_dir * 15, center_y - 50, 15, 40))
-        
-    else: # hurt
-        pygame.draw.rect(surface, color, (center_x - 20, center_y - 30, 40, 70), border_radius=5)
-        pygame.draw.circle(surface, (255, 150, 150), (center_x - eye_dir * 10, center_y - 50), 20)
-        pygame.draw.circle(surface, (0, 0, 0), (center_x - eye_dir * 5, center_y - 55), 4)
+        pygame.draw.line(surface, (220, 60, 60), (hx - 8, head_y + 7), (hx + 8, head_y + 10), 2)
+        pygame.draw.line(surface, (220, 60, 60), (hx - 8, head_y + 10), (hx + 8, head_y + 7), 2)
 
 def draw_zangief(surface, x, y, direction, state, hp, invul_timer):
     if invul_timer % 4 > 1:
@@ -1860,7 +1895,11 @@ def draw_inventory_bar():
                 else:
                     draw_flashlight_icon(screen, sr.centerx, sr.centery, 50)
             elif item == "Key":
-                draw_key_icon(screen, sr.centerx, sr.centery, 50)
+                if key_img:
+                    icon = pygame.transform.smoothscale(key_img, (slot_size + 10, slot_size - 8))
+                    screen.blit(icon, (sr.x - 5, sr.y + 4))
+                else:
+                    draw_key_icon(screen, sr.centerx, sr.centery, 50)
             elif item == "MysteryCube":
                 draw_mystery_cube_icon(screen, sr.centerx, sr.centery, 44)
             elif item == "SF2 Cartridge":
@@ -1879,15 +1918,15 @@ def draw_inventory_bar():
                 screen.blit(icon, (sr.x - 5, sr.y + 4))
             elif item == "Chi的奶嘴_去背.png":
                 if chi_pacifier_icon:
-                    icon = pygame.transform.scale(chi_pacifier_icon, (slot_size - 8, slot_size - 8))
-                    screen.blit(icon, (sr.x + 4, sr.y + 4))
+                    icon = pygame.transform.smoothscale(chi_pacifier_icon, (slot_size + 10, slot_size - 8))
+                    screen.blit(icon, (sr.x - 5, sr.y + 4))
                 else:
                     pygame.draw.circle(screen, (255, 200, 220), sr.center, 20)
                     pygame.draw.circle(screen, (200, 150, 180), sr.center, 20, 2)
             elif item == "扭蛋硬幣_去背.png":
                 if coin_img:
-                    icon = pygame.transform.scale(coin_img, (slot_size - 8, slot_size - 8))
-                    screen.blit(icon, (sr.x + 4, sr.y + 4))
+                    icon = pygame.transform.smoothscale(coin_img, (slot_size + 10, slot_size - 8))
+                    screen.blit(icon, (sr.x - 5, sr.y + 4))
                 else:
                     pygame.draw.circle(screen, (255, 215, 0), sr.center, 20)
                     pygame.draw.circle(screen, (218, 165, 32), sr.center, 20, 2)
@@ -2128,13 +2167,15 @@ while running:
                     _toggle_inv_slot(INV_SLOT_KEYS[event.key])
                 # Other keys depend on fighter state
                 elif fighter_state == "fighting":
-                    if event.key == pygame.K_SPACE and rt_p1["state"] != "attacking":
+                    # Attacks/jumps only start when grounded — starting an attack
+                    # mid-air used to leave the fighter stuck unable to move until
+                    # landing, since recovery to "idle" required being grounded.
+                    if event.key == pygame.K_SPACE and rt_p1["state"] not in ("attacking", "jumping") and rt_p1["y"] >= 470:
                         rt_p1["atk_timer"] = 15
                         rt_p1["state"] = "attacking"
-                        if abs(rt_p1["x"] - rt_p2["x"]) < 70 and rt_p1["y"] >= 470 and rt_p2["y"] >= 470:
-                            rt_p2["hp"] -= 10
-                            rt_p2["state"] = "jumping"
-                    elif event.key == pygame.K_UP and rt_p1["y"] >= 470:
+                        # Damage is applied by the per-frame hitbox check below,
+                        # not here — doing it in both places caused double damage.
+                    elif event.key == pygame.K_UP and rt_p1["state"] != "attacking" and rt_p1["y"] >= 470:
                         rt_p1["vy"] = -15
                         rt_p1["state"] = "jumping"
                 elif fighter_state == "round_over":
@@ -2144,7 +2185,7 @@ while running:
                         rt_p1["state"] = "idle"
                         rt_p2["state"] = "idle"
                         rt_p1["x"] = 200
-                        rt_p2["x"] = VIRTUAL_RES_1080[0] - 200
+                        rt_p2["x"] = WINDOW_RES[0] - 200
                         rt_p1["vy"] = 0
                         rt_p2["vy"] = 0
                         fighter_state = "fighting"
@@ -2623,14 +2664,13 @@ while running:
         if rt_p2["state"] != "attacking":
             dist = rt_p1["x"] - rt_p2["x"]
             if abs(dist) > 65:
-                if dist > 0: rt_p2["x"] += 2; rt_p2["dir"] = 1
-                else: rt_p2["x"] -= 2; rt_p2["dir"] = -1
+                if dist > 0: rt_p2["x"] += 3; rt_p2["dir"] = 1
+                else: rt_p2["x"] -= 3; rt_p2["dir"] = -1
                 if rt_p2["y"] >= 470: rt_p2["state"] = "moving"
-            elif abs(dist) <= 65 and rt_p2["atk_timer"] == 0 and random.random() < 0.05:
-                rt_p2["atk_timer"] = 20
+            elif abs(dist) <= 65 and rt_p2["atk_timer"] == 0 and rt_p2["y"] >= 470 and random.random() < 0.07:
+                rt_p2["atk_timer"] = 16
                 rt_p2["state"] = "attacking"
-                if rt_p1["y"] >= 470 and rt_p1["state"] != "jumping":
-                    rt_p1["hp"] -= 15
+                # Damage is applied by the per-frame hitbox check below, not here.
             else:
                 if rt_p2["y"] >= 470: rt_p2["state"] = "idle"
                 if random.random() < 0.02 and rt_p2["y"] >= 470:
@@ -2643,8 +2683,10 @@ while running:
             p["x"] = max(50, min(p["x"], WINDOW_RES[0] - 50))
             if p["atk_timer"] > 0:
                 p["atk_timer"] -= 1
-                if p["atk_timer"] == 0 and p["y"] >= 470:
-                    p["state"] = "idle"
+                if p["atk_timer"] == 0:
+                    # Always resolve to a valid state so an attack can never get
+                    # stuck mid-animation (e.g. if knocked airborne while attacking).
+                    p["state"] = "idle" if p["y"] >= 470 else "jumping"
             if p.get("invul_timer", 0) > 0:
                 p["invul_timer"] -= 1
 
@@ -2781,6 +2823,14 @@ while running:
         fl_active = selected_inv_slot >= 0 and selected_inv_slot < len(inventory) and inventory[selected_inv_slot] == "Flashlight"
 
         screen.blit(render_1988_scene(px_1080, py_1080, pS_1080, fl_active), (0, 0))
+
+        if fl_active and flashlight_icon_img:
+            _fl_size = flashlight_icon_img.get_width()
+            _fl_x, _fl_y = 15, WINDOW_RES[1] - _fl_size - 115
+            _fl_bg = pygame.Surface((_fl_size + 10, _fl_size + 10), pygame.SRCALPHA)
+            _fl_bg.fill((0, 0, 0, 140))
+            screen.blit(_fl_bg, (_fl_x - 5, _fl_y - 5))
+            screen.blit(flashlight_icon_img, (_fl_x, _fl_y))
 
         _1988_walk = {
             "down": player_img_1988_walk_down, "up": player_img_1988_walk_up,
@@ -3347,31 +3397,59 @@ while running:
         screen.blit(overlay, (0, 0))
 
         c_rect = pygame.Rect(100, 100, WINDOW_RES[0] - 200, WINDOW_RES[1] - 200)
-        pygame.draw.rect(screen, (20, 20, 20), c_rect, border_radius=10)
+        pygame.draw.rect(screen, (35, 30, 55), c_rect, border_radius=10)
+
+        # Floor panel aligned to where the fighters actually stand (was a thin
+        # line floating ~90px below their feet, making them look airborne)
+        _fighter_ground_y = 470
+        _floor_top = _fighter_ground_y + 42
+        _floor_rect = pygame.Rect(c_rect.x + 4, _floor_top, c_rect.width - 8, c_rect.bottom - _floor_top - 4)
+        pygame.draw.rect(screen, (70, 55, 42), _floor_rect)
+        pygame.draw.rect(screen, (115, 92, 60), (_floor_rect.x, _floor_rect.y, _floor_rect.width, 4))
+
         pygame.draw.rect(screen, (150, 150, 150), c_rect, 4, border_radius=10)
-        
-        screen.blit(font.render("STREET FIGHTER II", True, (255, 50, 50)), (c_rect.x + 20, c_rect.y + 20))
 
-        pygame.draw.rect(screen, (100, 200, 100), (c_rect.x + 50, c_rect.y + 500, c_rect.width - 100, 20))
+        # Title with a drop shadow for legibility
+        _title_txt = "STREET FIGHTER II"
+        _title_shadow = high_res_big_font.render(_title_txt, True, (60, 0, 0))
+        screen.blit(_title_shadow, _title_shadow.get_rect(center=(c_rect.centerx + 3, c_rect.y + 38)))
+        _title = high_res_big_font.render(_title_txt, True, (255, 70, 70))
+        screen.blit(_title, _title.get_rect(center=(c_rect.centerx, c_rect.y + 35)))
 
-        # Win indicator circles (left = player, right = enemy)
+        # Win indicator pips (left = player, right = enemy)
         for i in range(2):
-            col_p = (255, 215, 0) if i < fighter_player_wins else (60, 60, 60)
-            pygame.draw.circle(screen, col_p, (c_rect.x + 50 + i * 22, c_rect.y + 32), 8)
-            col_e = (255, 215, 0) if i < fighter_enemy_wins else (60, 60, 60)
-            pygame.draw.circle(screen, col_e, (c_rect.right - 50 - i * 22, c_rect.y + 32), 8)
+            col_p = (255, 215, 0) if i < fighter_player_wins else (75, 75, 85)
+            pygame.draw.circle(screen, col_p, (c_rect.x + 50 + i * 24, c_rect.y + 78), 8)
+            pygame.draw.circle(screen, (20, 20, 20), (c_rect.x + 50 + i * 24, c_rect.y + 78), 8, 2)
+            col_e = (255, 215, 0) if i < fighter_enemy_wins else (75, 75, 85)
+            pygame.draw.circle(screen, col_e, (c_rect.right - 50 - i * 24, c_rect.y + 78), 8)
+            pygame.draw.circle(screen, (20, 20, 20), (c_rect.right - 50 - i * 24, c_rect.y + 78), 8, 2)
 
-        # Health bars
-        pygame.draw.rect(screen, (255, 0, 0), (c_rect.x + 50, c_rect.y + 60, 300, 20))
-        pygame.draw.rect(screen, (0, 255, 0), (c_rect.x + 50, c_rect.y + 60, 3 * max(0, rt_p1["hp"]), 20))
+        # Health bars: bevelled, color-coded by remaining HP%
+        def _hp_bar_color(_hp):
+            _pct = max(0, _hp) / 100
+            if _pct > 0.5:
+                return (80, 220, 90)
+            elif _pct > 0.25:
+                return (240, 200, 60)
+            return (230, 70, 60)
 
-        pygame.draw.rect(screen, (255, 0, 0), (c_rect.right - 350, c_rect.y + 60, 300, 20))
-        pygame.draw.rect(screen, (0, 255, 0), (c_rect.right - 50 - 3 * max(0, rt_p2["hp"]), c_rect.y + 60, 3 * max(0, rt_p2["hp"]), 20))
+        _bar_w = 300
+        for _is_p1 in (True, False):
+            _bx = c_rect.x + 50 if _is_p1 else c_rect.right - 350
+            _by = c_rect.y + 120
+            _hp = rt_p1["hp"] if _is_p1 else rt_p2["hp"]
+            name_surf = font.render("PLAYER 1" if _is_p1 else "COMPUTER", True, (255, 255, 255))
+            screen.blit(name_surf, (_bx, _by - 22))
+            pygame.draw.rect(screen, (60, 20, 20), (_bx, _by, _bar_w, 20), border_radius=4)
+            _fill_w = int(_bar_w * max(0, _hp) / 100)
+            if _fill_w > 0:
+                _fill_rect = pygame.Rect(_bx, _by, _fill_w, 20) if _is_p1 else pygame.Rect(_bx + _bar_w - _fill_w, _by, _fill_w, 20)
+                pygame.draw.rect(screen, _hp_bar_color(_hp), _fill_rect)
+            pygame.draw.rect(screen, (220, 220, 220), (_bx, _by, _bar_w, 20), 2, border_radius=4)
 
-        screen.blit(font.render("PLAYER 1", True, (255, 255, 255)), (c_rect.x + 50, c_rect.y + 40))
-        screen.blit(font.render("COMPUTER", True, (255, 255, 255)), (c_rect.right - 350, c_rect.y + 40))
-
-        draw_fighter(screen, rt_p1["x"], rt_p1["y"], True, rt_p1["state"], rt_p1["hp"])
+        _p1_action = "hurt" if rt_p1.get("invul_timer", 0) > 0 and rt_p1["state"] != "attacking" else rt_p1["state"]
+        draw_fighter(screen, rt_p1["x"], rt_p1["y"], rt_p1["dir"], _p1_action, rt_p1["hp"])
         draw_zangief(screen, rt_p2["x"], rt_p2["y"], rt_p2["dir"], rt_p2["state"], rt_p2["hp"], rt_p2.get("invul_timer", 0))
 
         if fighter_message:
